@@ -172,11 +172,8 @@ class BubbleShooterGame(Widget):
                 self.shot_bubbles.append(bubble_to_shoot)
                 self.shots_remaining -= 1  # Decrement shots remaining
                 
-                # Check if game should end (no shots left and bubbles still on screen)
-                if self.shots_remaining <= 0 and len(self.grid_bubbles) > 0:
-                    self.game_active = False
-                else:
-                    # Only load next bubble if game is still active
+                # Only load next bubble if game is still active and shots remain
+                if self.shots_remaining > 0:
                     self.load_next_bubble()
                 
                 return True
@@ -263,6 +260,11 @@ class BubbleShooterGame(Widget):
                 self.shot_bubbles.remove(bubble)
                 continue
         
+        # Check for game over condition: all shots used, bubbles still on screen, and no bubbles moving
+        if self.shots_remaining <= 0 and len(self.grid_bubbles) > 0:
+            if not self.has_moving_bubbles():
+                self.game_active = False
+        
         # Redraw
         self.canvas.clear()
         with self.canvas:
@@ -271,6 +273,15 @@ class BubbleShooterGame(Widget):
             self.draw_shot_bubbles()
             self.draw_shooter()
             self.draw_ui()
+    
+    def has_moving_bubbles(self):
+        """Check if there are any bubbles currently moving"""
+        for bubble in self.shot_bubbles:
+            # Check if bubble has significant velocity (above small threshold)
+            speed = math.sqrt(bubble.vx * bubble.vx + bubble.vy * bubble.vy)
+            if speed > 1.0:  # Threshold to account for floating point precision
+                return True
+        return False
     
     def attach_bubble(self, bubble, grid_bubble):
         """Attach shot bubble to grid at correct position without intersection"""
