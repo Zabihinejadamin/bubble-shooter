@@ -65,24 +65,33 @@ class Bubble:
 class BubbleShooterGame(Widget):
     """Main game widget with enhanced 3D graphics"""
     
-    def __init__(self, **kwargs):
+    def __init__(self, level=None, **kwargs):
         super().__init__(**kwargs)
         
-        # Game settings
-        self.bubble_radius = 20
-        self.grid_width = 10
-        self.grid_height = 12
+        # Load level configuration
+        if level is None:
+            # Default level if none provided
+            from levels.level1 import Level1
+            level = Level1()
+        
+        level_config = level.get_config()
+        
+        # Game settings from level
+        self.bubble_radius = level_config['bubble_radius']
+        self.grid_width = level_config['grid_width']
+        self.grid_height = level_config['grid_height']
         # Grid spacing must be at least 2 * radius to prevent intersection
         self.grid_spacing = max(45, self.bubble_radius * 2.2)  # 2.2 * radius ensures no overlap
-        self.grid_start_x = 100  # Shifted left by 50 (was 150)
-        self.grid_start_y = 1015  # Shifted up by 25 (was 1040)
+        self.grid_start_x = level_config['grid_start_x']
+        self.grid_start_y = level_config['grid_start_y']
         
         # Game state
         self.score = 0
-        self.level = 1
+        self.level = level_config['level_number']
+        self.level_name = level_config['name']
         self.game_active = True
-        self.max_shots = 20  # Maximum number of bubbles to shoot
-        self.shots_remaining = 20  # Remaining shots
+        self.max_shots = level_config['max_shots']
+        self.shots_remaining = level_config['shots_remaining']
         
         # Bubbles
         self.grid_bubbles = []  # Bubbles in grid
