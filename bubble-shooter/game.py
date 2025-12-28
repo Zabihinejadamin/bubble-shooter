@@ -73,8 +73,8 @@ class BubbleShooterGame(Widget):
         self.grid_height = 12
         # Grid spacing must be at least 2 * radius to prevent intersection
         self.grid_spacing = max(45, self.bubble_radius * 2.2)  # 2.2 * radius ensures no overlap
-        self.grid_start_x = 50
-        self.grid_start_y = 500
+        self.grid_start_x = 100  # Shifted left by 50 (was 150)
+        self.grid_start_y = 1015  # Shifted up by 25 (was 1040)
         
         # Game state
         self.score = 0
@@ -88,8 +88,8 @@ class BubbleShooterGame(Widget):
         
         # Shooter
         self.shooter_x = 180  # Center of screen (360/2)
-        self.shooter_y = 600  # Top of screen
-        self.aim_angle = -90  # Degrees (-90 = straight down)
+        self.shooter_y = 50  # Bottom of screen (rotated 180 degrees)
+        self.aim_angle = 90  # Degrees (90 = straight up)
         self.current_bubble = None
         
         # Initialize
@@ -185,10 +185,13 @@ class BubbleShooterGame(Widget):
         if not self.game_active:
             return
         
-        # Update shooter position to top center of screen
+        # Update shooter position to bottom center of screen (rotated 180 degrees)
+        # Update grid position to top of screen (shifted down by 275, left by 50)
         if self.height > 0:
-            self.shooter_y = self.height - 50  # Position near top
+            self.shooter_y = 50  # Position near bottom
             self.shooter_x = self.width / 2  # Center horizontally
+            self.grid_start_x = 100  # Shifted left by 50
+            self.grid_start_y = self.height + 275  # Position bubbles at top + 275 shift (300 - 25)
         
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
@@ -202,10 +205,15 @@ class BubbleShooterGame(Widget):
                 bubble.x = self.width - bubble.radius
                 bubble.vx = -bubble.vx * 0.8
             
-            # Check top collision (bubble going above screen)
+            # Check top collision (bubble going above screen - bounce off top where bubbles are)
             if bubble.y + bubble.radius > self.height:
                 bubble.y = self.height - bubble.radius
                 bubble.vy = -bubble.vy * 0.8
+            
+            # Check bottom collision (bubble going below screen - remove it, shooter is at bottom)
+            if bubble.y - bubble.radius < 0:
+                self.shot_bubbles.remove(bubble)
+                continue
             
             # Check collision with grid bubbles (prevent intersection)
             min_distance = float('inf')
@@ -227,9 +235,10 @@ class BubbleShooterGame(Widget):
                 self.attach_bubble(bubble, closest_bubble)
                 break
             
-            # Remove if below screen
-            if bubble.y + bubble.radius < 0:
+            # Remove if below screen (bubble went off bottom where shooter is)
+            if bubble.y - bubble.radius < 0:
                 self.shot_bubbles.remove(bubble)
+                continue
         
         # Redraw
         self.canvas.clear()
