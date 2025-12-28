@@ -4,6 +4,7 @@ Bubble Shooter Game - Main game logic with 3D-style graphics
 
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Ellipse, Line, Rectangle, PushMatrix, PopMatrix
+from kivy.core.text import Label as CoreLabel
 from kivy.clock import Clock
 import random
 import math
@@ -80,6 +81,8 @@ class BubbleShooterGame(Widget):
         self.score = 0
         self.level = 1
         self.game_active = True
+        self.max_shots = 20  # Maximum number of bubbles to shoot
+        self.shots_remaining = 20  # Remaining shots
         
         # Bubbles
         self.grid_bubbles = []  # Bubbles in grid
@@ -145,6 +148,10 @@ class BubbleShooterGame(Widget):
             distance = math.sqrt(dx * dx + dy * dy)
             
             if distance > 10:  # Minimum distance to shoot
+                # Check if player has shots remaining
+                if self.shots_remaining <= 0:
+                    return super().on_touch_down(touch)
+                
                 # Update aim angle
                 self.aim_angle = math.degrees(math.atan2(dy, dx))
                 
@@ -163,7 +170,15 @@ class BubbleShooterGame(Widget):
                 bubble_to_shoot = self.current_bubble
                 self.current_bubble = None
                 self.shot_bubbles.append(bubble_to_shoot)
-                self.load_next_bubble()
+                self.shots_remaining -= 1  # Decrement shots remaining
+                
+                # Check if game should end (no shots left and bubbles still on screen)
+                if self.shots_remaining <= 0 and len(self.grid_bubbles) > 0:
+                    self.game_active = False
+                else:
+                    # Only load next bubble if game is still active
+                    self.load_next_bubble()
+                
                 return True
         except Exception as e:
             print(f"Error in on_touch_down: {e}")
@@ -182,9 +197,6 @@ class BubbleShooterGame(Widget):
     
     def update(self, dt):
         """Update game state (called every frame)"""
-        if not self.game_active:
-            return
-        
         # Update shooter position to bottom center of screen (rotated 180 degrees)
         # Update grid position to top of screen (shifted down by 275, left by 50)
         if self.height > 0:
@@ -192,6 +204,17 @@ class BubbleShooterGame(Widget):
             self.shooter_x = self.width / 2  # Center horizontally
             self.grid_start_x = 100  # Shifted left by 50
             self.grid_start_y = self.height + 275  # Position bubbles at top + 275 shift (300 - 25)
+        
+        if not self.game_active:
+            # Still redraw even when game is over to show game over message
+            self.canvas.clear()
+            with self.canvas:
+                self.draw_background()
+                self.draw_grid()
+                self.draw_shot_bubbles()
+                self.draw_shooter()
+                self.draw_ui()
+            return
         
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
@@ -377,6 +400,10 @@ class BubbleShooterGame(Widget):
             
             # Check for floating bubbles
             self.check_floating_bubbles()
+            
+            # Check if all bubbles are cleared (win condition)
+            if len(self.grid_bubbles) == 0:
+                self.game_active = False  # Player wins!
     
     def find_connected_matches(self, bubble, matches, visited):
         """Find all connected bubbles of same element"""
@@ -497,6 +524,44 @@ class BubbleShooterGame(Widget):
     
     def draw_ui(self):
         """Draw UI elements"""
-        # Score text would go here (using Label widget in full implementation)
-        # For now, score is shown in console
-        pass
+        # Draw remaining shots counter in bottom left
+        if self.height > 0:
+            # Ensure shots_remaining doesn't go below 0 for display
+            display_shots = max(0, self.shots_remaining)
+            
+            # Create text label for shots remaining
+            label = CoreLabel(text=f'Shots: {display_shots}/{self.max_shots}', 
+                            font_size=20, color=(1, 1, 1, 1))
+            label.refresh()
+            
+            # Draw the text in bottom left
+            Color(1, 1, 1, 1)  # White text
+            Rectangle(texture=label.texture, 
+                     pos=(10, 10), 
+                     size=label.texture.size)
+            
+            # Draw game over message if game is not active
+            if not self.game_active:
+                if len(self.grid_bubbles) > 0:
+                    # Lost - bubbles still on screen (ran out of shots)
+                    game_over_label = CoreLabel(text='You Lost - Retry', 
+                                              font_size=24, color=(1, 0, 0, 1))
+                else:
+                    # Won - all bubbles cleared
+                    game_over_label = CoreLabel(text='YOU WIN!', 
+                                              font_size=24, color=(0, 1, 0, 1))
+                game_over_label.refresh()
+                
+                # Draw semi-transparent dark background for game over message
+                Color(0, 0, 0, 0.7)  # Dark semi-transparent background
+                Rectangle(pos=(self.width/2 - game_over_label.texture.size[0]/2 - 15, 
+                              self.height/2 - game_over_label.texture.size[1]/2 - 15),
+                         size=(game_over_label.texture.size[0] + 30, 
+                               game_over_label.texture.size[1] + 30))
+                
+                # Draw the game over text
+                Color(1, 1, 1, 1)  # White text
+                Rectangle(texture=game_over_label.texture,
+                         pos=(self.width/2 - game_over_label.texture.size[0]/2, 
+                              self.height/2 - game_over_label.texture.size[1]/2),
+                         size=game_over_label.texture.size)
