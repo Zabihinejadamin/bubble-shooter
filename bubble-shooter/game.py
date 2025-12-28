@@ -39,6 +39,7 @@ class Bubble:
         self.vy = 0  # velocity y
         self.attached = False  # Is bubble attached to grid?
         self.hit_count = 0  # For Earth bubbles (need 2 hits)
+        self.has_dynamite = False  # Does this bubble contain dynamite?
     
     def update(self, dt):
         """Update bubble position"""
@@ -136,6 +137,10 @@ class BubbleShooterGame(Widget):
                 element = random.randint(0, 3)
                 bubble = Bubble(x, y, element, self.bubble_radius)
                 bubble.attached = True
+                
+                # Randomly assign dynamite to ~8% of bubbles
+                if random.random() < 0.08:
+                    bubble.has_dynamite = True
                 
                 # Verify no intersection before adding
                 if not self.check_bubble_intersections(bubble):
@@ -418,10 +423,18 @@ class BubbleShooterGame(Widget):
         self.find_connected_matches(bubble, matches, [])
         
         if len(matches) >= 3:
+            # Check if any matched bubble has dynamite
+            has_dynamite_explosion = False
+            dynamite_positions = []
+            
             # Count how many bubbles will be removed
             exploded_count = 0
             for match in matches:
                 if match in self.grid_bubbles:
+                    # Check for dynamite before removing
+                    if match.has_dynamite:
+                        has_dynamite_explosion = True
+                        dynamite_positions.append((match.x, match.y))
                     self.grid_bubbles.remove(match)
                     exploded_count += 1
             
@@ -429,12 +442,49 @@ class BubbleShooterGame(Widget):
             if exploded_count > 0:
                 self.score += exploded_count * self.shots_remaining
             
+            # Trigger dynamite explosions if any dynamite was found
+            if has_dynamite_explosion:
+                for dynamite_x, dynamite_y in dynamite_positions:
+                    self.trigger_dynamite_explosion(dynamite_x, dynamite_y)
+            
             # Check for floating bubbles
             self.check_floating_bubbles()
             
             # Check if all bubbles are cleared (win condition)
             if len(self.grid_bubbles) == 0:
                 self.game_active = False  # Player wins!
+    
+    def trigger_dynamite_explosion(self, x, y):
+        """Trigger dynamite explosion at position (x, y), removing all bubbles within 3 bubble radii"""
+        explosion_radius = 3 * self.bubble_radius * 2  # 3 bubble diameters
+        
+        bubbles_to_explode = []
+        for bubble in self.grid_bubbles[:]:
+            dx = bubble.x - x
+            dy = bubble.y - y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            # If bubble is within explosion radius, mark it for removal
+            if distance <= explosion_radius:
+                bubbles_to_explode.append(bubble)
+        
+        # Remove all bubbles in explosion radius
+        exploded_count = 0
+        for bubble in bubbles_to_explode:
+            if bubble in self.grid_bubbles:
+                self.grid_bubbles.remove(bubble)
+                exploded_count += 1
+        
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            self.score += exploded_count * self.shots_remaining
+        
+        # Check for floating bubbles after explosion
+        self.check_floating_bubbles()
+        
+        # Check if all bubbles are cleared (win condition)
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
     
     def find_connected_matches(self, bubble, matches, visited):
         """Find all connected bubbles of same element"""
@@ -596,6 +646,19 @@ class BubbleShooterGame(Widget):
         # Real bubbles can have color fringing
         Color(color[0] * 0.8, color[1] * 0.8, color[2] * 0.8, 0.4)
         Line(circle=(x, y, radius - 0.5), width=1)
+        
+        # 5. Draw dynamite indicator if bubble has dynamite
+        if bubble.has_dynamite:
+            # Draw a red "X" or warning symbol
+            Color(1, 0, 0, 0.8)  # Red color
+            # Draw X shape
+            line_width = 2
+            offset = radius * 0.4
+            Line(points=[x - offset, y - offset, x + offset, y + offset], width=line_width)
+            Line(points=[x - offset, y + offset, x + offset, y - offset], width=line_width)
+            # Draw warning circle
+            Color(1, 0.5, 0, 0.6)  # Orange-red
+            Line(circle=(x, y, radius * 0.6), width=1.5)
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
