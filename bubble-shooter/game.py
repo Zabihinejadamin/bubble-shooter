@@ -6,8 +6,10 @@ from kivy.uix.widget import Widget
 from kivy.graphics import Color, Ellipse, Line, Rectangle, PushMatrix, PopMatrix
 from kivy.core.text import Label as CoreLabel
 from kivy.clock import Clock
+from kivy.core.image import Image as CoreImage
 import random
 import math
+import os
 
 # Element types
 FIRE = 0
@@ -103,6 +105,10 @@ class BubbleShooterGame(Widget):
         self.shooter_y = 50  # Bottom of screen (rotated 180 degrees)
         self.aim_angle = 90  # Degrees (90 = straight up)
         self.current_bubble = None
+        
+        # Background image
+        self.background_texture = None
+        self.load_background_image()
         
         # Initialize
         self.initialize_grid()
@@ -520,15 +526,32 @@ class BubbleShooterGame(Widget):
         if len(self.grid_bubbles) == 0:
             self.game_active = False  # Player wins!
     
+    def load_background_image(self):
+        """Load background image texture"""
+        background_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\grunge-white-surface-rough-background-textured.jpg"
+        if os.path.exists(background_path):
+            try:
+                img = CoreImage(background_path)
+                self.background_texture = img.texture
+            except Exception as e:
+                print(f"Error loading background image: {e}")
+                self.background_texture = None
+        else:
+            print(f"Background image not found: {background_path}")
+            self.background_texture = None
+    
     def draw_background(self):
-        """Draw game background - lighter for transparency visibility"""
-        # Lighter background so transparent bubbles are visible
-        Color(0.2, 0.25, 0.3)  # Light gray-blue
-        Rectangle(pos=(0, 0), size=(self.width, self.height))
-        
-        # Subtle gradient for depth
-        Color(0.25, 0.3, 0.35, 0.2)
-        Rectangle(pos=(0, self.height * 0.7), size=(self.width, self.height * 0.3))
+        """Draw game background using image"""
+        if self.background_texture and self.width > 0 and self.height > 0:
+            # Draw background image covering entire screen with darker tint
+            Color(0.4, 0.4, 0.4, 1)  # Darker tint (0.4 = 40% brightness)
+            Rectangle(texture=self.background_texture, 
+                     pos=(0, 0), 
+                     size=(self.width, self.height))
+        else:
+            # Fallback to solid color if image not loaded
+            Color(0.1, 0.1, 0.15)  # Dark gray-blue
+            Rectangle(pos=(0, 0), size=(self.width, self.height))
     
     def draw_grid(self):
         """Draw bubble grid with 3D effects"""
