@@ -771,34 +771,178 @@ class BubbleShooterGame(Widget):
         Line(points=[x, y, aim_end_x, aim_end_y], width=2)
     
     def draw_ui(self):
-        """Draw UI elements"""
-        # Draw remaining shots counter in bottom left
+        """Draw UI elements with beautiful design"""
         if self.height > 0:
             # Ensure shots_remaining doesn't go below 0 for display
             display_shots = max(0, self.shots_remaining)
             
-            # Create text label for shots remaining
-            label = CoreLabel(text=f'Shots: {display_shots}/{self.max_shots}', 
-                            font_size=20, color=(1, 1, 1, 1))
-            label.refresh()
+            # ===== SHOTS REMAINING (Bottom Left) =====
+            shots_text = f'{display_shots}/{self.max_shots}'
+            shots_label = CoreLabel(text=shots_text, 
+                                  font_size=24, 
+                                  color=(1, 1, 1, 1))
+            shots_label.refresh()
             
-            # Draw the text in bottom left
+            # Draw background panel with rounded corners effect
+            panel_padding = 12
+            panel_height = shots_label.texture.size[1] + panel_padding * 2
+            panel_width = shots_label.texture.size[0] + panel_padding * 2 + 60  # Extra space for icon
+            
+            # Shadow
+            Color(0, 0, 0, 0.3)
+            Rectangle(pos=(15, 8), size=(panel_width, panel_height))
+            
+            # Main panel background (gradient effect with darker bottom)
+            Color(0.15, 0.2, 0.3, 0.85)  # Dark blue-gray
+            Rectangle(pos=(10, 10), size=(panel_width, panel_height))
+            
+            # Top highlight
+            Color(0.3, 0.4, 0.5, 0.6)
+            Rectangle(pos=(10, 10 + panel_height - 3), size=(panel_width, 3))
+            
+            # Draw icon circle (bullet/target icon representation)
+            icon_x = 10 + panel_padding + 15
+            icon_y = 10 + panel_height / 2
+            Color(1, 0.7, 0.2, 0.9)  # Gold/orange
+            Ellipse(pos=(icon_x - 12, icon_y - 12), size=(24, 24))
+            Color(1, 0.9, 0.5, 1)  # Lighter gold
+            Ellipse(pos=(icon_x - 8, icon_y - 8), size=(16, 16))
+            
+            # Draw shots text
+            text_x = icon_x + 20
+            text_y = 10 + panel_padding
             Color(1, 1, 1, 1)  # White text
-            Rectangle(texture=label.texture, 
-                     pos=(10, 10), 
-                     size=label.texture.size)
+            Rectangle(texture=shots_label.texture, 
+                     pos=(text_x, text_y), 
+                     size=shots_label.texture.size)
             
-            # Draw score in bottom right
-            score_label = CoreLabel(text=f'Score: {self.score}', 
-                                  font_size=20, color=(1, 1, 1, 1))
+            # ===== SCORE (Bottom Right) =====
+            score_text = f'{self.score:,}'  # Add comma formatting
+            score_label = CoreLabel(text=score_text, 
+                                  font_size=24, 
+                                  color=(1, 1, 1, 1))
             score_label.refresh()
             
-            # Calculate position for bottom right (accounting for text width)
-            score_x = self.width - score_label.texture.size[0] - 10
+            # Score panel dimensions
+            score_panel_padding = 12
+            score_panel_height = score_label.texture.size[1] + score_panel_padding * 2
+            score_panel_width = score_label.texture.size[0] + score_panel_padding * 2 + 60 + 80  # Extra space for stars + 80  # Extra space for stars
+            
+            # Calculate position for bottom right
+            score_panel_x = self.width - score_panel_width - 10
+            
+            # Shadow
+            Color(0, 0, 0, 0.3)
+            Rectangle(pos=(score_panel_x + 5, 8), size=(score_panel_width, score_panel_height))
+            
+            # Main panel background
+            Color(0.2, 0.15, 0.3, 0.85)  # Dark purple-gray
+            Rectangle(pos=(score_panel_x, 10), size=(score_panel_width, score_panel_height))
+            
+            # Top highlight
+            Color(0.4, 0.3, 0.5, 0.6)
+            Rectangle(pos=(score_panel_x, 10 + score_panel_height - 3), size=(score_panel_width, 3))
+            
+            # Draw star/medal icon
+            score_icon_x = score_panel_x + score_panel_padding + 15
+            score_icon_y = 10 + score_panel_height / 2
+            Color(1, 0.8, 0.2, 0.9)  # Gold
+            # Draw star shape (simplified as diamond)
+            star_points = [
+                score_icon_x, score_icon_y + 10,  # Top
+                score_icon_x - 8, score_icon_y,  # Left
+                score_icon_x, score_icon_y - 10,  # Bottom
+                score_icon_x + 8, score_icon_y,  # Right
+            ]
+            # Draw filled star using triangles (simplified as circle with highlight)
+            Ellipse(pos=(score_icon_x - 10, score_icon_y - 10), size=(20, 20))
+            Color(1, 0.95, 0.5, 1)  # Lighter gold
+            Ellipse(pos=(score_icon_x - 6, score_icon_y - 6), size=(12, 12))
+            
+            # Draw score text
+            score_text_x = score_icon_x + 20
+            score_text_y = 10 + score_panel_padding
             Color(1, 1, 1, 1)  # White text
             Rectangle(texture=score_label.texture, 
-                     pos=(score_x, 10), 
+                     pos=(score_text_x, score_text_y), 
                      size=score_label.texture.size)
+            
+            # Draw three achievement stars next to score
+            stars_start_x = score_text_x + score_label.texture.size[0] + 15
+            stars_y = 10 + score_panel_height / 2
+            star_size = 16
+            star_spacing = 20
+            
+            for i in range(3):
+                star_x = stars_start_x + i * star_spacing
+                star_center_y = stars_y
+                
+                # Determine if star should be gold based on score thresholds
+                thresholds = [500, 1000, 2000]
+                is_gold = self.score > thresholds[i]
+                
+                # Draw star shape (5-pointed star)
+                outer_radius = star_size / 2
+                inner_radius = outer_radius * 0.4
+                num_points = 5
+                
+                # Calculate star points
+                star_points = []
+                for j in range(num_points * 2):
+                    angle = (j * math.pi / num_points) - math.pi / 2  # Start from top
+                    if j % 2 == 0:
+                        # Outer point
+                        radius = outer_radius
+                    else:
+                        # Inner point
+                        radius = inner_radius
+                    px = star_x + radius * math.cos(angle)
+                    py = star_center_y + radius * math.sin(angle)
+                    star_points.extend([px, py])
+                
+                if is_gold:
+                    # Gold star - outer glow
+                    Color(1, 0.8, 0.2, 0.4)  # Gold glow with transparency
+                    glow_points = []
+                    for j in range(num_points * 2):
+                        angle = (j * math.pi / num_points) - math.pi / 2
+                        if j % 2 == 0:
+                            radius = outer_radius + 2
+                        else:
+                            radius = inner_radius + 1
+                        px = star_x + radius * math.cos(angle)
+                        py = star_center_y + radius * math.sin(angle)
+                        glow_points.extend([px, py])
+                    # Draw glow (simplified as filled shape)
+                    for k in range(len(glow_points) // 2 - 1):
+                        Line(points=[glow_points[k*2], glow_points[k*2+1], 
+                                    glow_points[(k+1)*2], glow_points[(k+1)*2+1]], width=3)
+                    
+                    # Gold star - main
+                    Color(1, 0.85, 0.3, 1)  # Bright gold
+                    Line(points=star_points, width=2, close=True)
+                    # Fill star (simplified - draw lines to center)
+                    for k in range(0, len(star_points), 2):
+                        Line(points=[star_x, star_center_y, star_points[k], star_points[k+1]], width=1)
+                    
+                    # Gold star - highlight (inner glow)
+                    Color(1, 0.95, 0.6, 0.8)  # Light gold
+                    highlight_radius = inner_radius * 0.5
+                    Ellipse(pos=(star_x - highlight_radius, star_center_y - highlight_radius), 
+                           size=(highlight_radius * 2, highlight_radius * 2))
+                else:
+                    # Gray star - outer
+                    Color(0.3, 0.3, 0.3, 0.5)  # Dark gray with transparency
+                    Line(points=star_points, width=2, close=True)
+                    # Fill star
+                    for k in range(0, len(star_points), 2):
+                        Line(points=[star_x, star_center_y, star_points[k], star_points[k+1]], width=1)
+                    
+                    # Gray star - inner
+                    Color(0.5, 0.5, 0.5, 0.6)  # Lighter gray
+                    inner_highlight_radius = inner_radius * 0.5
+                    Ellipse(pos=(star_x - inner_highlight_radius, star_center_y - inner_highlight_radius), 
+                           size=(inner_highlight_radius * 2, inner_highlight_radius * 2))
             
             # Draw game over message if game is not active
             if not self.game_active:
