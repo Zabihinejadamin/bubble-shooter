@@ -102,6 +102,7 @@ class BubbleShooterGame(Widget):
         self.game_active = True
         self.max_shots = level_config['max_shots']
         self.shots_remaining = level_config['shots_remaining']
+        self.is_loading = False  # Loading state for restart/level transition
         
         # Bubbles
         self.grid_bubbles = []  # Bubbles in grid
@@ -250,16 +251,32 @@ class BubbleShooterGame(Widget):
         # Check retry button click
         if (retry_x <= touch.x <= retry_x + button_width and
             button_y <= touch.y <= button_y + button_height):
-            self.restart_game()
+            self.start_restart()
             return True
         
         # Check next level button click (only if won)
         if won and (next_level_x <= touch.x <= next_level_x + button_width and
                     button_y <= touch.y <= button_y + button_height):
-            self.next_level()
+            self.start_next_level()
             return True
         
         return False
+    
+    def start_restart(self):
+        """Start restart process - show loading screen immediately"""
+        self.is_loading = True
+        self.game_active = False  # Hide game over screen immediately
+        # Schedule actual restart after a frame to show loading screen
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.restart_game(), 0.1)
+    
+    def start_next_level(self):
+        """Start next level process - show loading screen immediately"""
+        self.is_loading = True
+        self.game_active = False  # Hide game over screen immediately
+        # Schedule actual level transition after a frame to show loading screen
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.next_level(), 0.1)
     
     def restart_game(self):
         """Restart the current level"""
@@ -268,6 +285,7 @@ class BubbleShooterGame(Widget):
         # Reset game state
         self.score = 0
         self.game_active = True
+        self.is_loading = False
         self.max_shots = level_config['max_shots']
         self.shots_remaining = level_config['shots_remaining']
         
@@ -305,6 +323,14 @@ class BubbleShooterGame(Widget):
                 self.grid_start_x = level_config['grid_start_x']
                 self.grid_start_y = level_config['grid_start_y']
                 self._grid_position_initialized = True
+        
+        if self.is_loading:
+            # Show loading screen
+            self.canvas.clear()
+            with self.canvas:
+                self.draw_background()
+                self.draw_loading_screen()
+            return
         
         if not self.game_active:
             # Still redraw even when game is over to show game over message
@@ -538,9 +564,19 @@ class BubbleShooterGame(Widget):
             if len(self.grid_bubbles) == 0:
                 self.game_active = False  # Player wins!
     
+    def get_dynamite_radius(self):
+        """Get dynamite explosion radius in bubble diameters based on level"""
+        if self.level <= 3:
+            return 5  # Levels 1-3: radius of 5 bubbles
+        elif self.level <= 6:
+            return 4  # Levels 4-6: radius of 4 bubbles
+        else:
+            return 3  # Levels 7+: radius of 3 bubbles
+    
     def trigger_dynamite_explosion(self, x, y):
-        """Trigger dynamite explosion at position (x, y), removing all bubbles within 3 bubble radii"""
-        explosion_radius = 3 * self.bubble_radius * 2  # 3 bubble diameters
+        """Trigger dynamite explosion at position (x, y), removing all bubbles within level-based radius"""
+        bubble_radius_count = self.get_dynamite_radius()
+        explosion_radius = bubble_radius_count * self.bubble_radius * 2  # Convert to pixel radius (bubble diameters)
         
         bubbles_to_explode = []
         for bubble in self.grid_bubbles[:]:
@@ -1105,6 +1141,68 @@ class BubbleShooterGame(Widget):
                     next_level_x = center_x + button_spacing / 2
                     self.draw_button(next_level_x, button_y, button_width, button_height,
                                    'NEXT', (0.2, 0.8, 0.4, 1))
+    
+    def draw_loading_screen(self):
+        """Draw loading screen"""
+        center_x = self.width / 2
+        center_y = self.height / 2
+        
+        # Draw dark overlay background
+        Color(0, 0, 0, 0.85)  # Darker overlay for loading
+        Rectangle(pos=(0, 0), size=(self.width, self.height))
+        
+        # Draw loading panel
+        panel_width = 250
+        panel_height = 150
+        panel_x = center_x - panel_width / 2
+        panel_y = center_y - panel_height / 2
+        
+        # Shadow
+        Color(0, 0, 0, 0.5)
+        Rectangle(pos=(panel_x + 5, panel_y - 5), size=(panel_width, panel_height))
+        
+        # Main panel background
+        Color(0.15, 0.15, 0.2, 0.95)  # Dark blue-gray
+        Rectangle(pos=(panel_x, panel_y), size=(panel_width, panel_height))
+        
+        # Panel border
+        Color(1, 1, 1, 0.3)
+        Line(rectangle=(panel_x, panel_y, panel_width, panel_height), width=2)
+        
+        # Top highlight
+        Color(0.3, 0.4, 0.6, 0.8)
+        Rectangle(pos=(panel_x, panel_y + panel_height - 5), size=(panel_width, 5))
+        
+        # Draw "Loading..." text
+        loading_label = CoreLabel(text='Loading...', 
+                                 font_size=28, 
+                                 color=(1, 1, 1, 1))
+        loading_label.refresh()
+        loading_x = center_x - loading_label.texture.size[0] / 2
+        loading_y = panel_y + panel_height - 50
+        Color(1, 1, 1, 1)
+        Rectangle(texture=loading_label.texture,
+                 pos=(loading_x, loading_y),
+                 size=loading_label.texture.size)
+        
+        # Draw animated loading spinner (simple pulsing dots)
+        spinner_y = panel_y + 60
+        spinner_radius = 8
+        spinner_spacing = 20
+        spinner_start_x = center_x - (spinner_spacing * 2)
+        
+        # Animate spinner based on time (simple pulsing effect)
+        import time
+        current_time = time.time()
+        pulse_phase = int(current_time * 2) % 3  # Cycle through 0, 1, 2
+        
+        for i in range(3):
+            dot_x = spinner_start_x + i * spinner_spacing
+            # Pulse the current dot
+            alpha = 1.0 if i == pulse_phase else 0.4
+            Color(0.5, 0.7, 1, alpha)  # Light blue
+            Ellipse(pos=(dot_x - spinner_radius, spinner_y - spinner_radius),
+                   size=(spinner_radius * 2, spinner_radius * 2))
     
     def draw_button(self, x, y, width, height, text, color):
         """Draw a beautiful button"""
