@@ -45,10 +45,17 @@ class Bubble:
         self.attached = False  # Is bubble attached to grid?
         self.hit_count = 0  # For Earth bubbles (need 2 hits)
         self.has_dynamite = False  # Does this bubble contain dynamite?
+        self.falling = False  # Is bubble falling (disconnected from top)?
+        self.gravity = 300  # Gravity acceleration for falling bubbles
     
     def update(self, dt):
         """Update bubble position"""
-        if not self.attached:
+        if self.falling:
+            # Apply gravity to falling bubbles
+            self.vy += self.gravity * dt
+            self.y += self.vy * dt
+        elif not self.attached:
+            # Normal movement for shot bubbles
             self.x += self.vx * dt
             self.y += self.vy * dt
     
@@ -343,6 +350,20 @@ class BubbleShooterGame(Widget):
                 self.draw_ui()
             return
         
+        # Update falling bubbles (disconnected from top)
+        for bubble in self.grid_bubbles[:]:
+            if bubble.falling:
+                bubble.update(dt)
+                
+                # Check if falling bubble hits the bottom of the screen
+                if bubble.y - bubble.radius < 0:
+                    # Bubble hit bottom - remove it (score already calculated when it started falling)
+                    self.grid_bubbles.remove(bubble)
+                    
+                    # Check if all bubbles are cleared (win condition)
+                    if len(self.grid_bubbles) == 0:
+                        self.game_active = False  # Player wins!
+        
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
             bubble.update(dt)
@@ -405,17 +426,20 @@ class BubbleShooterGame(Widget):
             self.draw_ui()
     
     def has_moving_bubbles(self):
-        """Check if there are any bubbles currently moving"""
+        """Check if there are any bubbles currently moving (only shot bubbles, not falling ones)"""
+        # Only check shot bubbles - falling bubbles don't prevent game over
         for bubble in self.shot_bubbles:
             # Check if bubble has significant velocity (above small threshold)
             speed = math.sqrt(bubble.vx * bubble.vx + bubble.vy * bubble.vy)
             if speed > 1.0:  # Threshold to account for floating point precision
                 return True
+        
         return False
     
     def attach_bubble(self, bubble, grid_bubble):
         """Attach shot bubble to grid at correct position without intersection"""
         bubble.attached = True
+        bubble.falling = False  # Attached bubbles don't fall
         bubble.vx = 0
         bubble.vy = 0
         
@@ -625,33 +649,35 @@ class BubbleShooterGame(Widget):
                     self.find_connected_matches(other, matches, visited)
     
     def check_floating_bubbles(self):
-        """Check for bubbles not connected to top and remove them"""
+        """Check for bubbles not connected to topmost line and make them fall"""
         if len(self.grid_bubbles) == 0:
             return
         
-        # Find all bubbles connected to the top row
-        # Top row bubbles are those at the highest y position (closest to grid_start_y)
+        # Find all bubbles in the topmost line (at grid_start_y)
+        # Only bubbles at the topmost line are considered "attached to top"
         top_threshold = self.grid_spacing * 0.5  # Tolerance for "top row" (half grid spacing)
         top_bubbles = []
         
-        # Find the maximum y position (top of grid)
-        max_y = max(bubble.y for bubble in self.grid_bubbles) if self.grid_bubbles else 0
-        
-        # Find all bubbles at the top (within threshold of max_y)
+        # Find all bubbles at the topmost line (at grid_start_y)
         for bubble in self.grid_bubbles:
-            if abs(bubble.y - max_y) <= top_threshold:
+            if abs(bubble.y - self.grid_start_y) <= top_threshold:
                 top_bubbles.append(bubble)
         
         if not top_bubbles:
-            # If no top bubbles found, all bubbles are floating - remove all
-            exploded_count = len(self.grid_bubbles)
-            for bubble in self.grid_bubbles[:]:
-                self.grid_bubbles.remove(bubble)
+            # If no top bubbles found, all bubbles are floating - make them all fall
+            falling_count = 0
+            for bubble in self.grid_bubbles:
+                if not bubble.falling:
+                    bubble.falling = True
+                    bubble.attached = False
+                    bubble.vy = 0  # Start falling from rest
+                    falling_count += 1
             
-            # Calculate score: exploded bubbles * remaining shooting bubbles
-            if exploded_count > 0:
-                self.score += exploded_count * self.shots_remaining
+            # Calculate score: all falling bubbles * remaining shooting bubbles
+            if falling_count > 0:
+                self.score += falling_count * self.shots_remaining
             
+            # Check if all bubbles are cleared (win condition)
             if len(self.grid_bubbles) == 0:
                 self.game_active = False  # Player wins!
             return
@@ -671,7 +697,7 @@ class BubbleShooterGame(Widget):
             neighbor_distance = self.grid_spacing * 1.1  # Slightly larger than grid spacing
             
             for other in self.grid_bubbles:
-                if other not in connected_bubbles:
+                if other not in connected_bubbles and not other.falling:
                     dx = current.x - other.x
                     dy = current.y - other.y
                     distance = math.sqrt(dx * dx + dy * dy)
@@ -681,18 +707,20 @@ class BubbleShooterGame(Widget):
                         connected_bubbles.add(other)
                         queue.append(other)
         
-        # Remove all bubbles that are NOT connected to the top
-        bubbles_to_remove = [bubble for bubble in self.grid_bubbles if bubble not in connected_bubbles]
-        exploded_count = len(bubbles_to_remove)
+        # Mark all bubbles that are NOT connected to the top as falling
+        falling_count = 0
+        for bubble in self.grid_bubbles:
+            if bubble not in connected_bubbles and not bubble.falling:
+                bubble.falling = True
+                bubble.attached = False
+                bubble.vy = 0  # Start falling from rest
+                falling_count += 1
         
-        for bubble in bubbles_to_remove:
-            self.grid_bubbles.remove(bubble)
+        # Calculate score: all falling bubbles * remaining shooting bubbles
+        if falling_count > 0:
+            self.score += falling_count * self.shots_remaining
         
-        # Calculate score: exploded bubbles * remaining shooting bubbles
-        if exploded_count > 0:
-            self.score += exploded_count * self.shots_remaining
-        
-        # If bubbles were removed, check if game is won
+        # Check if all bubbles are cleared (win condition)
         if len(self.grid_bubbles) == 0:
             self.game_active = False  # Player wins!
     
@@ -1057,7 +1085,9 @@ class BubbleShooterGame(Widget):
             
             # Draw beautiful game over screen with buttons
             if not self.game_active:
-                won = len(self.grid_bubbles) == 0
+                # Check if won: either no bubbles left, or only falling bubbles (which are already scored)
+                has_attached_bubbles = any(not bubble.falling for bubble in self.grid_bubbles)
+                won = len(self.grid_bubbles) == 0 or not has_attached_bubbles
                 center_x = self.width / 2
                 center_y = self.height / 2
                 
