@@ -10,6 +10,11 @@ from kivy.core.image import Image as CoreImage
 import random
 import math
 import os
+try:
+    from PIL import Image as PILImage
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 # Element types
 FIRE = 0
@@ -110,6 +115,10 @@ class BubbleShooterGame(Widget):
         # Background image
         self.background_texture = None
         self.load_background_image()
+        
+        # Dynamite image
+        self.dynamite_texture = None
+        self.load_dynamite_image()
         
         # Initialize
         self.initialize_grid()
@@ -590,6 +599,52 @@ class BubbleShooterGame(Widget):
             print(f"Background image not found: {background_path}")
             self.background_texture = None
     
+    def load_dynamite_image(self):
+        """Load dynamite image texture with white background removed"""
+        dynamite_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\istockphoto-1139873743-612x612.jpg"
+        if os.path.exists(dynamite_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(dynamite_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+                    
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+                    
+                    pil_img.putdata(new_data)
+                    
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.dynamite_texture = img.texture
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(dynamite_path)
+                    self.dynamite_texture = img.texture
+            except Exception as e:
+                print(f"Error loading dynamite image: {e}")
+                self.dynamite_texture = None
+        else:
+            print(f"Dynamite image not found: {dynamite_path}")
+            self.dynamite_texture = None
+    
     def draw_background(self):
         """Draw game background using image"""
         if self.background_texture and self.width > 0 and self.height > 0:
@@ -649,16 +704,32 @@ class BubbleShooterGame(Widget):
         
         # 5. Draw dynamite indicator if bubble has dynamite
         if bubble.has_dynamite:
-            # Draw a red "X" or warning symbol
-            Color(1, 0, 0, 0.8)  # Red color
-            # Draw X shape
-            line_width = 2
-            offset = radius * 0.4
-            Line(points=[x - offset, y - offset, x + offset, y + offset], width=line_width)
-            Line(points=[x - offset, y + offset, x + offset, y - offset], width=line_width)
-            # Draw warning circle
-            Color(1, 0.5, 0, 0.6)  # Orange-red
-            Line(circle=(x, y, radius * 0.6), width=1.5)
+            if self.dynamite_texture:
+                # Draw dynamite image centered on bubble
+                dynamite_size = radius * 2.5  # Much larger than bubble radius for better visibility
+                Color(1, 1, 1, 1)  # Full color (no tinting)
+                Rectangle(texture=self.dynamite_texture,
+                         pos=(x - dynamite_size / 2, y - dynamite_size / 2),
+                         size=(dynamite_size, dynamite_size))
+            else:
+                # Fallback: Draw simple dynamite stick if image not loaded
+                stick_width = radius * 0.6
+                stick_height = radius * 0.8
+                stick_x = x - stick_width / 2
+                stick_y = y - stick_height / 2
+                
+                # Draw dynamite stick (brown/red rectangle)
+                Color(0.6, 0.2, 0.1, 0.9)  # Brown-red color
+                Rectangle(pos=(stick_x, stick_y), size=(stick_width, stick_height))
+                
+                # Draw fuse on top (small line/circle)
+                fuse_length = radius * 0.3
+                fuse_y = stick_y + stick_height
+                Color(0.8, 0.8, 0.3, 0.9)  # Yellow/light color for fuse
+                Line(points=[x, fuse_y, x, fuse_y + fuse_length], width=2)
+                # Draw fuse tip (small circle)
+                Color(1, 0.3, 0, 0.9)  # Orange-red for lit fuse
+                Ellipse(pos=(x - 2, fuse_y + fuse_length - 2), size=(4, 4))
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
