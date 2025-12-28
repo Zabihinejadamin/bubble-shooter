@@ -88,20 +88,16 @@ class BubbleShooterGame(Widget):
         
         # Shooter
         self.shooter_x = 180  # Center of screen (360/2)
-        self.shooter_y = 100
-        self.aim_angle = 90  # Degrees (90 = straight up)
+        self.shooter_y = 600  # Top of screen (pointing down)
+        self.aim_angle = -90  # Degrees (-90 = straight down)
         self.current_bubble = None
         
         # Initialize
         self.initialize_grid()
         self.load_next_bubble()
         
-        # Bind touch events
-        self.bind(on_touch_down=self.on_touch_down)
-        self.bind(on_touch_move=self.on_touch_move)
-        self.bind(on_touch_up=self.on_touch_up)
-        
-        self.touch_start = None
+        # Note: on_touch_down, on_touch_move, on_touch_up are automatically
+        # connected by Kivy when using these method names
         
     def initialize_grid(self):
         """Create initial bubble grid - ensures no intersections"""
@@ -129,48 +125,69 @@ class BubbleShooterGame(Widget):
     
     def load_next_bubble(self):
         """Load next bubble to shoot"""
+        if self.shooter_x is None or self.shooter_y is None:
+            return
         element = random.randint(0, 3)
         self.next_bubble = Bubble(self.shooter_x, self.shooter_y, element, self.bubble_radius)
         self.current_bubble = self.next_bubble
     
-    def on_touch_down(self, touch):
-        """Handle touch down - start aiming"""
-        self.touch_start = (touch.x, touch.y)
-        return True
-    
-    def on_touch_move(self, touch):
-        """Handle touch move - update aim"""
-        if self.touch_start:
-            dx = touch.x - self.shooter_x
-            dy = touch.y - self.shooter_y
-            self.aim_angle = math.degrees(math.atan2(dy, dx))
-        return True
-    
-    def on_touch_up(self, touch):
-        """Handle touch up - shoot bubble"""
-        if self.touch_start and self.current_bubble and not self.current_bubble.attached:
-            # Calculate direction
+    def on_touch_down(self, touch, *args):
+        """Handle touch down - shoot bubble immediately"""
+        try:
+            if self.current_bubble is None:
+                return super().on_touch_down(touch)
+            if self.current_bubble.attached:
+                return super().on_touch_down(touch)
+                
+            # Calculate direction toward touch point
             dx = touch.x - self.shooter_x
             dy = touch.y - self.shooter_y
             distance = math.sqrt(dx * dx + dy * dy)
             
             if distance > 10:  # Minimum distance to shoot
-                # Normalize direction
+                # Update aim angle
+                self.aim_angle = math.degrees(math.atan2(dy, dx))
+                
+                # Set bubble position at shooter tip before shooting
+                angle_rad = math.radians(self.aim_angle)
+                shooter_length = 40
+                self.current_bubble.x = self.shooter_x + math.cos(angle_rad) * shooter_length
+                self.current_bubble.y = self.shooter_y + math.sin(angle_rad) * shooter_length
+                
+                # Normalize direction and set velocity
                 speed = 400  # pixels per second
                 self.current_bubble.vx = (dx / distance) * speed
                 self.current_bubble.vy = (dy / distance) * speed
                 
-                self.shot_bubbles.append(self.current_bubble)
+                # Shoot the bubble
+                bubble_to_shoot = self.current_bubble
                 self.current_bubble = None
+                self.shot_bubbles.append(bubble_to_shoot)
                 self.load_next_bubble()
-        
-        self.touch_start = None
-        return True
+                return True
+        except Exception as e:
+            print(f"Error in on_touch_down: {e}")
+        return super().on_touch_down(touch)
+    
+    def on_touch_move(self, touch, *args):
+        """Handle touch move - update aim angle (for visual feedback)"""
+        dx = touch.x - self.shooter_x
+        dy = touch.y - self.shooter_y
+        self.aim_angle = math.degrees(math.atan2(dy, dx))
+        return super().on_touch_move(touch)
+    
+    def on_touch_up(self, touch, *args):
+        """Handle touch up - no action needed, shooting happens on touch_down"""
+        return super().on_touch_up(touch)
     
     def update(self, dt):
         """Update game state (called every frame)"""
         if not self.game_active:
             return
+        
+        # Update shooter position to top of screen
+        if self.height > 0:
+            self.shooter_y = self.height - 50  # Position near top
         
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
@@ -184,6 +201,7 @@ class BubbleShooterGame(Widget):
                 bubble.x = self.width - bubble.radius
                 bubble.vx = -bubble.vx * 0.8
             
+            # Check top collision (bubble going above screen)
             if bubble.y + bubble.radius > self.height:
                 bubble.y = self.height - bubble.radius
                 bubble.vy = -bubble.vy * 0.8
@@ -394,9 +412,12 @@ class BubbleShooterGame(Widget):
         for bubble in self.shot_bubbles:
             self.draw_bubble_3d(bubble)
     
-    def draw_bubble_3d(self, bubble):
+    def draw_bubble_3d(self, bubble, x=None, y=None):
         """Draw a realistic bubble - transparent, glassy, with highlights like real soap bubbles"""
-        x, y = bubble.x, bubble.y
+        if x is None:
+            x = bubble.x
+        if y is None:
+            y = bubble.y
         radius = bubble.radius
         color = bubble.get_color()
         
@@ -427,23 +448,42 @@ class BubbleShooterGame(Widget):
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
-        # Draw current bubble with 3D effect
-        if self.current_bubble:
-            self.draw_bubble_3d(self.current_bubble)
+        x, y = self.shooter_x, self.shooter_y
+        shooter_length = 40
+        shooter_width = 8
         
-        # Draw aim line with gradient
-        if self.touch_start:
-            # Draw line with fading effect
-            start_pos = (self.shooter_x, self.shooter_y)
-            end_pos = (self.touch_start[0], self.touch_start[1])
-            
-            # Outer glow
-            Color(1, 1, 1, 0.2)
-            Line(points=[start_pos[0], start_pos[1], end_pos[0], end_pos[1]], width=5)
-            
-            # Main line
-            Color(1, 1, 1, 0.6)  # White, semi-transparent
-            Line(points=[start_pos[0], start_pos[1], end_pos[0], end_pos[1]], width=3)
+        # Convert angle to radians
+        angle_rad = math.radians(self.aim_angle)
+        
+        # Calculate shooter end point
+        end_x = x + math.cos(angle_rad) * shooter_length
+        end_y = y + math.sin(angle_rad) * shooter_length
+        
+        # Draw shooter base/cannon (circular base)
+        Color(0.3, 0.3, 0.3)  # Dark gray
+        Ellipse(pos=(x - 15, y - 15), size=(30, 30))
+        
+        # Draw shooter barrel (rotating)
+        # Use PushMatrix/PopMatrix for rotation (simulated with line)
+        Color(0.5, 0.5, 0.5)  # Medium gray
+        Line(points=[x, y, end_x, end_y], width=shooter_width)
+        
+        # Draw shooter tip (small circle at end)
+        Color(0.4, 0.4, 0.4)  # Slightly darker gray
+        Ellipse(pos=(end_x - 5, end_y - 5), size=(10, 10))
+        
+        # Draw current bubble with 3D effect (positioned at shooter tip)
+        if self.current_bubble and not self.current_bubble.attached:
+            # Draw bubble at shooter tip position without modifying bubble properties
+            self.draw_bubble_3d(self.current_bubble, x=end_x, y=end_y)
+        
+        # Draw aim line (shows current aim direction)
+        aim_line_length = 100
+        aim_end_x = x + math.cos(angle_rad) * aim_line_length
+        aim_end_y = y + math.sin(angle_rad) * aim_line_length
+        
+        Color(1, 1, 1, 0.4)  # White, semi-transparent
+        Line(points=[x, y, aim_end_x, aim_end_y], width=2)
     
     def draw_ui(self):
         """Draw UI elements"""
