@@ -82,6 +82,8 @@ class BubbleShooterGame(Widget):
             from levels.level1 import Level1
             level = Level1()
         
+        # Store level object for restart/next level functionality
+        self.current_level = level
         level_config = level.get_config()
         
         # Game settings from level
@@ -164,8 +166,12 @@ class BubbleShooterGame(Widget):
         self.current_bubble = self.next_bubble
     
     def on_touch_down(self, touch, *args):
-        """Handle touch down - shoot bubble immediately"""
+        """Handle touch down - shoot bubble or handle button clicks"""
         try:
+            # Check if game is over and handle button clicks
+            if not self.game_active:
+                return self.handle_game_over_click(touch)
+            
             if self.current_bubble is None:
                 return super().on_touch_down(touch)
             if self.current_bubble.attached:
@@ -221,15 +227,84 @@ class BubbleShooterGame(Widget):
         """Handle touch up - no action needed, shooting happens on touch_down"""
         return super().on_touch_up(touch)
     
+    def handle_game_over_click(self, touch):
+        """Handle button clicks on game over screen"""
+        if self.height == 0:
+            return False
+        
+        # Calculate button positions (matching draw_ui)
+        center_x = self.width / 2
+        button_width = 120
+        button_height = 45
+        button_spacing = 20
+        button_y = self.height / 2 - 100
+        
+        # Retry button position
+        retry_x = center_x - button_width - button_spacing / 2
+        
+        # Next level button position (only show if won)
+        next_level_x = center_x + button_spacing / 2
+        
+        won = len(self.grid_bubbles) == 0
+        
+        # Check retry button click
+        if (retry_x <= touch.x <= retry_x + button_width and
+            button_y <= touch.y <= button_y + button_height):
+            self.restart_game()
+            return True
+        
+        # Check next level button click (only if won)
+        if won and (next_level_x <= touch.x <= next_level_x + button_width and
+                    button_y <= touch.y <= button_y + button_height):
+            self.next_level()
+            return True
+        
+        return False
+    
+    def restart_game(self):
+        """Restart the current level"""
+        level_config = self.current_level.get_config()
+        
+        # Reset game state
+        self.score = 0
+        self.game_active = True
+        self.max_shots = level_config['max_shots']
+        self.shots_remaining = level_config['shots_remaining']
+        
+        # Reset grid position from level config
+        self.grid_start_x = level_config['grid_start_x']
+        self.grid_start_y = level_config['grid_start_y']
+        
+        # Clear bubbles
+        self.grid_bubbles = []
+        self.shot_bubbles = []
+        self.current_bubble = None
+        
+        # Reinitialize
+        self.initialize_grid()
+        self.load_next_bubble()
+    
+    def next_level(self):
+        """Advance to next level (for now, just restart level 1)"""
+        # TODO: Implement level progression
+        # For now, restart level 1
+        from levels.level1 import Level1
+        self.current_level = Level1()
+        self.restart_game()
+    
     def update(self, dt):
         """Update game state (called every frame)"""
         # Update shooter position to bottom center of screen (rotated 180 degrees)
-        # Update grid position to top of screen (shifted down by 275, left by 50)
         if self.height > 0:
             self.shooter_y = 50  # Position near bottom
             self.shooter_x = self.width / 2  # Center horizontally
-            self.grid_start_x = 100  # Shifted left by 50
-            self.grid_start_y = self.height + 275  # Position bubbles at top + 275 shift (300 - 25)
+            # Don't override grid_start_x and grid_start_y - they should remain from level config
+            # Only update if they haven't been set yet (initial load)
+            if not hasattr(self, '_grid_position_initialized'):
+                level_config = self.current_level.get_config()
+                self.grid_start_x = level_config['grid_start_x']
+                self.grid_start_y = level_config['grid_start_y']
+                self._grid_position_initialized = True
         
         if not self.game_active:
             # Still redraw even when game is over to show game over message
@@ -944,28 +1019,117 @@ class BubbleShooterGame(Widget):
                     Ellipse(pos=(star_x - inner_highlight_radius, star_center_y - inner_highlight_radius), 
                            size=(inner_highlight_radius * 2, inner_highlight_radius * 2))
             
-            # Draw game over message if game is not active
+            # Draw beautiful game over screen with buttons
             if not self.game_active:
-                if len(self.grid_bubbles) > 0:
-                    # Lost - bubbles still on screen (ran out of shots)
-                    game_over_label = CoreLabel(text='You Lost - Retry', 
-                                              font_size=24, color=(1, 0, 0, 1))
+                won = len(self.grid_bubbles) == 0
+                center_x = self.width / 2
+                center_y = self.height / 2
+                
+                # Draw dark overlay background
+                Color(0, 0, 0, 0.75)  # Dark semi-transparent overlay
+                Rectangle(pos=(0, 0), size=(self.width, self.height))
+                
+                # Draw main panel background with shadow
+                panel_width = 280
+                panel_height = 200
+                panel_x = center_x - panel_width / 2
+                panel_y = center_y - panel_height / 2
+                
+                # Shadow
+                Color(0, 0, 0, 0.5)
+                Rectangle(pos=(panel_x + 5, panel_y - 5), size=(panel_width, panel_height))
+                
+                # Main panel background
+                if won:
+                    Color(0.1, 0.3, 0.2, 0.95)  # Dark green for win
                 else:
-                    # Won - all bubbles cleared
-                    game_over_label = CoreLabel(text='YOU WIN!', 
-                                              font_size=24, color=(0, 1, 0, 1))
-                game_over_label.refresh()
+                    Color(0.3, 0.1, 0.1, 0.95)  # Dark red for loss
+                Rectangle(pos=(panel_x, panel_y), size=(panel_width, panel_height))
                 
-                # Draw semi-transparent dark background for game over message
-                Color(0, 0, 0, 0.7)  # Dark semi-transparent background
-                Rectangle(pos=(self.width/2 - game_over_label.texture.size[0]/2 - 15, 
-                              self.height/2 - game_over_label.texture.size[1]/2 - 15),
-                         size=(game_over_label.texture.size[0] + 30, 
-                               game_over_label.texture.size[1] + 30))
+                # Panel border
+                Color(1, 1, 1, 0.3)
+                Line(rectangle=(panel_x, panel_y, panel_width, panel_height), width=2)
                 
-                # Draw the game over text
-                Color(1, 1, 1, 1)  # White text
-                Rectangle(texture=game_over_label.texture,
-                         pos=(self.width/2 - game_over_label.texture.size[0]/2, 
-                              self.height/2 - game_over_label.texture.size[1]/2),
-                         size=game_over_label.texture.size)
+                # Top highlight
+                if won:
+                    Color(0.2, 0.6, 0.4, 0.8)
+                else:
+                    Color(0.6, 0.2, 0.2, 0.8)
+                Rectangle(pos=(panel_x, panel_y + panel_height - 5), size=(panel_width, 5))
+                
+                # Draw title
+                if won:
+                    title_text = 'YOU WIN!'
+                    title_color = (0.3, 1, 0.5, 1)  # Bright green
+                else:
+                    title_text = 'GAME OVER'
+                    title_color = (1, 0.3, 0.3, 1)  # Bright red
+                
+                title_label = CoreLabel(text=title_text, 
+                                      font_size=32, 
+                                      color=title_color)
+                title_label.refresh()
+                title_x = center_x - title_label.texture.size[0] / 2
+                title_y = panel_y + panel_height - 50
+                Color(1, 1, 1, 1)
+                Rectangle(texture=title_label.texture,
+                         pos=(title_x, title_y),
+                         size=title_label.texture.size)
+                
+                # Draw score display
+                score_text = f'Final Score: {self.score:,}'
+                score_label = CoreLabel(text=score_text,
+                                      font_size=20,
+                                      color=(1, 1, 1, 1))
+                score_label.refresh()
+                score_x = center_x - score_label.texture.size[0] / 2
+                score_y = title_y - 35
+                Color(1, 1, 1, 1)
+                Rectangle(texture=score_label.texture,
+                         pos=(score_x, score_y),
+                         size=score_label.texture.size)
+                
+                # Draw buttons
+                button_width = 120
+                button_height = 45
+                button_spacing = 20
+                button_y = panel_y + 30
+                
+                # Retry button
+                retry_x = center_x - button_width - button_spacing / 2
+                self.draw_button(retry_x, button_y, button_width, button_height, 
+                               'RETRY', (0.2, 0.5, 0.8, 1))
+                
+                # Next level button (only if won)
+                if won:
+                    next_level_x = center_x + button_spacing / 2
+                    self.draw_button(next_level_x, button_y, button_width, button_height,
+                                   'NEXT', (0.2, 0.8, 0.4, 1))
+    
+    def draw_button(self, x, y, width, height, text, color):
+        """Draw a beautiful button"""
+        # Shadow
+        Color(0, 0, 0, 0.4)
+        Rectangle(pos=(x + 2, y - 2), size=(width, height))
+        
+        # Button background
+        Color(color[0], color[1], color[2], color[3])
+        Rectangle(pos=(x, y), size=(width, height))
+        
+        # Button border
+        Color(1, 1, 1, 0.3)
+        Line(rectangle=(x, y, width, height), width=2)
+        
+        # Top highlight
+        Color(1, 1, 1, 0.2)
+        Rectangle(pos=(x, y + height - 3), size=(width, 3))
+        
+        # Button text
+        text_label = CoreLabel(text=text, font_size=20, color=(1, 1, 1, 1))
+        text_label.refresh()
+        text_x = x + (width - text_label.texture.size[0]) / 2
+        text_y = y + (height - text_label.texture.size[1]) / 2
+        Color(1, 1, 1, 1)
+        Rectangle(texture=text_label.texture,
+                 pos=(text_x, text_y),
+                 size=text_label.texture.size)

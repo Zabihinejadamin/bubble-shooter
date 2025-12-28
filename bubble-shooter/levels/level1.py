@@ -21,7 +21,7 @@ class Level1(LevelBase):
         # Grid spacing must be at least 2 * radius to prevent intersection
         self.grid_spacing = max(45, self.bubble_radius * 2.2)  # 2.2 * radius ensures no overlap
         self.grid_start_x = 100  # Shifted left by 50 (was 150)
-        self.grid_start_y = 1015  # Shifted up by 25 (was 1040)
+        # grid_start_y is inherited from LevelBase (1015)
         
         # Game state for Level 1
         self.max_shots = 20  # Maximum number of bubbles to shoot

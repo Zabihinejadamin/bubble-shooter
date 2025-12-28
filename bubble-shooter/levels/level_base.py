@@ -33,7 +33,7 @@ class LevelBase:
         self.grid_height = 12
         self.grid_spacing = 45
         self.grid_start_x = 100
-        self.grid_start_y = 1015
+        self.grid_start_y = 1015  # Topmost bubble line position (fixed for all levels)
         
         # Game state
         self.max_shots = 20
