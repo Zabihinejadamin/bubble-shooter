@@ -88,7 +88,7 @@ class BubbleShooterGame(Widget):
         
         # Shooter
         self.shooter_x = 180  # Center of screen (360/2)
-        self.shooter_y = 600  # Top of screen (pointing down)
+        self.shooter_y = 600  # Top of screen
         self.aim_angle = -90  # Degrees (-90 = straight down)
         self.current_bubble = None
         
@@ -185,9 +185,10 @@ class BubbleShooterGame(Widget):
         if not self.game_active:
             return
         
-        # Update shooter position to top of screen
+        # Update shooter position to top center of screen
         if self.height > 0:
             self.shooter_y = self.height - 50  # Position near top
+            self.shooter_x = self.width / 2  # Center horizontally
         
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
@@ -487,9 +488,6 @@ class BubbleShooterGame(Widget):
     
     def draw_ui(self):
         """Draw UI elements"""
-        # Score background
-        Color(0, 0, 0, 0.5)  # Black, semi-transparent
-        Rectangle(pos=(10, self.height - 50), size=(150, 40))
-        
         # Score text would go here (using Label widget in full implementation)
         # For now, score is shown in console
+        pass
