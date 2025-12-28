@@ -403,11 +403,16 @@ class BubbleShooterGame(Widget):
         self.find_connected_matches(bubble, matches, [])
         
         if len(matches) >= 3:
-            # Remove matched bubbles
+            # Count how many bubbles will be removed
+            exploded_count = 0
             for match in matches:
                 if match in self.grid_bubbles:
                     self.grid_bubbles.remove(match)
-                    self.score += 10
+                    exploded_count += 1
+            
+            # Calculate score: exploded bubbles * remaining shooting bubbles
+            if exploded_count > 0:
+                self.score += exploded_count * self.shots_remaining
             
             # Check for floating bubbles
             self.check_floating_bubbles()
@@ -435,10 +440,76 @@ class BubbleShooterGame(Widget):
                     self.find_connected_matches(other, matches, visited)
     
     def check_floating_bubbles(self):
-        """Check for bubbles not connected to top"""
-        # Simplified: remove bubbles with no neighbors
-        # Full implementation would use graph traversal
-        pass
+        """Check for bubbles not connected to top and remove them"""
+        if len(self.grid_bubbles) == 0:
+            return
+        
+        # Find all bubbles connected to the top row
+        # Top row bubbles are those at the highest y position (closest to grid_start_y)
+        top_threshold = self.grid_spacing * 0.5  # Tolerance for "top row" (half grid spacing)
+        top_bubbles = []
+        
+        # Find the maximum y position (top of grid)
+        max_y = max(bubble.y for bubble in self.grid_bubbles) if self.grid_bubbles else 0
+        
+        # Find all bubbles at the top (within threshold of max_y)
+        for bubble in self.grid_bubbles:
+            if abs(bubble.y - max_y) <= top_threshold:
+                top_bubbles.append(bubble)
+        
+        if not top_bubbles:
+            # If no top bubbles found, all bubbles are floating - remove all
+            exploded_count = len(self.grid_bubbles)
+            for bubble in self.grid_bubbles[:]:
+                self.grid_bubbles.remove(bubble)
+            
+            # Calculate score: exploded bubbles * remaining shooting bubbles
+            if exploded_count > 0:
+                self.score += exploded_count * self.shots_remaining
+            
+            if len(self.grid_bubbles) == 0:
+                self.game_active = False  # Player wins!
+            return
+        
+        # Use BFS to find all bubbles connected to top bubbles
+        connected_bubbles = set()
+        queue = list(top_bubbles)
+        
+        for bubble in top_bubbles:
+            connected_bubbles.add(bubble)
+        
+        # BFS traversal to find all connected bubbles
+        while queue:
+            current = queue.pop(0)
+            
+            # Find all neighbors of current bubble
+            neighbor_distance = self.grid_spacing * 1.1  # Slightly larger than grid spacing
+            
+            for other in self.grid_bubbles:
+                if other not in connected_bubbles:
+                    dx = current.x - other.x
+                    dy = current.y - other.y
+                    distance = math.sqrt(dx * dx + dy * dy)
+                    
+                    # If bubbles are touching/neighbors, they're connected
+                    if distance < neighbor_distance:
+                        connected_bubbles.add(other)
+                        queue.append(other)
+        
+        # Remove all bubbles that are NOT connected to the top
+        bubbles_to_remove = [bubble for bubble in self.grid_bubbles if bubble not in connected_bubbles]
+        exploded_count = len(bubbles_to_remove)
+        
+        for bubble in bubbles_to_remove:
+            self.grid_bubbles.remove(bubble)
+        
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            self.score += exploded_count * self.shots_remaining
+        
+        # If bubbles were removed, check if game is won
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
     
     def draw_background(self):
         """Draw game background - lighter for transparency visibility"""
@@ -550,6 +621,18 @@ class BubbleShooterGame(Widget):
             Rectangle(texture=label.texture, 
                      pos=(10, 10), 
                      size=label.texture.size)
+            
+            # Draw score in bottom right
+            score_label = CoreLabel(text=f'Score: {self.score}', 
+                                  font_size=20, color=(1, 1, 1, 1))
+            score_label.refresh()
+            
+            # Calculate position for bottom right (accounting for text width)
+            score_x = self.width - score_label.texture.size[0] - 10
+            Color(1, 1, 1, 1)  # White text
+            Rectangle(texture=score_label.texture, 
+                     pos=(score_x, 10), 
+                     size=score_label.texture.size)
             
             # Draw game over message if game is not active
             if not self.game_active:
