@@ -420,36 +420,7 @@ class BubbleShooterGame(Widget):
         Color(color[0], color[1], color[2], 0.6)  # More opaque on edges
         Line(circle=(x, y, radius), width=rim_width)
         
-        # 4. Draw top highlight (like light reflecting off soap bubble surface)
-        # Real bubbles have a bright white highlight on top
-        highlight_size = radius * 0.6
-        highlight_offset_x = radius * 0.25
-        highlight_offset_y = radius * 0.25
-        
-        # Large soft highlight
-        Color(1, 1, 1, 0.5)  # White, semi-transparent
-        Ellipse(pos=(x - radius + highlight_offset_x, y - radius + highlight_offset_y),
-               size=(highlight_size, highlight_size))
-        
-        # 5. Draw small bright highlight (specular reflection - like glass)
-        # Real bubbles have a small bright white spot
-        small_highlight_size = radius * 0.25
-        small_offset_x = radius * 0.15
-        small_offset_y = radius * 0.15
-        Color(1, 1, 1, 0.9)  # Very bright white
-        Ellipse(pos=(x - radius + small_offset_x, y - radius + small_offset_y),
-               size=(small_highlight_size, small_highlight_size))
-        
-        # 6. Draw bottom dark area (shadow inside bubble - like real bubbles)
-        # Real bubbles are darker at the bottom
-        dark_area_size = radius * 0.5
-        dark_offset_x = radius * 0.2
-        dark_offset_y = -radius * 0.3
-        Color(0, 0, 0, 0.2)  # Dark, transparent
-        Ellipse(pos=(x - radius + dark_offset_x, y - radius + dark_offset_y),
-               size=(dark_area_size, dark_area_size))
-        
-        # 7. Draw subtle color rim (prismatic effect on edges)
+        # 4. Draw subtle color rim (prismatic effect on edges)
         # Real bubbles can have color fringing
         Color(color[0] * 0.8, color[1] * 0.8, color[2] * 0.8, 0.4)
         Line(circle=(x, y, radius - 0.5), width=1)
