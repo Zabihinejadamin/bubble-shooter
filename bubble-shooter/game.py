@@ -131,6 +131,10 @@ class BubbleShooterGame(Widget):
         self.dynamite_texture = None
         self.load_dynamite_image()
         
+        # Mine image
+        self.mine_texture = None
+        self.load_mine_image()
+        
         # Initialize
         self.initialize_grid()
         self.load_next_bubble()
@@ -878,6 +882,52 @@ class BubbleShooterGame(Widget):
             print(f"Dynamite image not found: {dynamite_path}")
             self.dynamite_texture = None
     
+    def load_mine_image(self):
+        """Load mine image texture with white background removed"""
+        mine_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\istockphoto-1474907248-612x612.jpg"
+        if os.path.exists(mine_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(mine_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+                    
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+                    
+                    pil_img.putdata(new_data)
+                    
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.mine_texture = img.texture
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(mine_path)
+                    self.mine_texture = img.texture
+            except Exception as e:
+                print(f"Error loading mine image: {e}")
+                self.mine_texture = None
+        else:
+            print(f"Mine image not found: {mine_path}")
+            self.mine_texture = None
+    
     def draw_background(self):
         """Draw game background using image"""
         if self.background_texture and self.width > 0 and self.height > 0:
@@ -966,30 +1016,38 @@ class BubbleShooterGame(Widget):
         
         # 6. Draw mine indicator if bubble has a mine
         if bubble.has_mine:
-            # Draw mine as a warning triangle with exclamation mark
-            mine_size = radius * 1.8
-            
-            # Draw warning triangle (upside down triangle)
-            triangle_points = [
-                x, y + mine_size * 0.4,  # Top point
-                x - mine_size * 0.5, y - mine_size * 0.3,  # Bottom left
-                x + mine_size * 0.5, y - mine_size * 0.3,  # Bottom right
-            ]
-            Color(1, 0.8, 0, 0.9)  # Yellow-orange warning color
-            Line(points=triangle_points, width=2, close=True)
-            
-            # Fill triangle slightly
-            Color(1, 0.9, 0.3, 0.6)  # Lighter yellow fill
-            # Draw filled triangle using multiple lines (simplified)
-            for i in range(len(triangle_points) // 2 - 1):
-                Line(points=[x, y, triangle_points[i*2], triangle_points[i*2+1]], width=1)
-            
-            # Draw exclamation mark in center
-            Color(1, 0.2, 0.2, 1)  # Red for exclamation
-            # Exclamation mark line
-            Line(points=[x, y - mine_size * 0.15, x, y + mine_size * 0.15], width=2)
-            # Exclamation mark dot
-            Ellipse(pos=(x - 2, y + mine_size * 0.2), size=(4, 4))
+            if self.mine_texture:
+                # Draw mine image centered on bubble
+                mine_size = radius * 2.5  # Much larger than bubble radius for better visibility
+                Color(1, 1, 1, 1)  # Full color (no tinting)
+                Rectangle(texture=self.mine_texture,
+                         pos=(x - mine_size / 2, y - mine_size / 2),
+                         size=(mine_size, mine_size))
+            else:
+                # Fallback: Draw simple mine symbol if image not loaded
+                mine_size = radius * 1.8
+                
+                # Draw warning triangle (upside down triangle)
+                triangle_points = [
+                    x, y + mine_size * 0.4,  # Top point
+                    x - mine_size * 0.5, y - mine_size * 0.3,  # Bottom left
+                    x + mine_size * 0.5, y - mine_size * 0.3,  # Bottom right
+                ]
+                Color(1, 0.8, 0, 0.9)  # Yellow-orange warning color
+                Line(points=triangle_points, width=2, close=True)
+                
+                # Fill triangle slightly
+                Color(1, 0.9, 0.3, 0.6)  # Lighter yellow fill
+                # Draw filled triangle using multiple lines (simplified)
+                for i in range(len(triangle_points) // 2 - 1):
+                    Line(points=[x, y, triangle_points[i*2], triangle_points[i*2+1]], width=1)
+                
+                # Draw exclamation mark in center
+                Color(1, 0.2, 0.2, 1)  # Red for exclamation
+                # Exclamation mark line
+                Line(points=[x, y - mine_size * 0.15, x, y + mine_size * 0.15], width=2)
+                # Exclamation mark dot
+                Ellipse(pos=(x - 2, y + mine_size * 0.2), size=(4, 4))
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
