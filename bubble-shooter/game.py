@@ -46,6 +46,7 @@ class Bubble:
         self.hit_count = 0  # For Earth bubbles (need 2 hits)
         self.has_dynamite = False  # Does this bubble contain dynamite?
         self.has_mine = False  # Does this bubble contain a mine?
+        self.has_golden = False  # Is this a golden bubble? (extra score when shot directly)
         self.falling = False  # Is bubble falling (disconnected from top)?
         self.gravity = 300  # Gravity acceleration for falling bubbles
     
@@ -135,6 +136,10 @@ class BubbleShooterGame(Widget):
         self.mine_texture = None
         self.load_mine_image()
         
+        # Gold bubble image
+        self.gold_texture = None
+        self.load_gold_image()
+        
         # Initialize
         self.initialize_grid()
         self.load_next_bubble()
@@ -179,6 +184,12 @@ class BubbleShooterGame(Widget):
                 if self.level > 2 and not bubble.has_dynamite:
                     if random.random() < 0.06:
                         bubble.has_mine = True
+                
+                # Randomly assign golden bubbles to ~5% of bubbles (only for level > 5)
+                # Golden bubbles are mutually exclusive with dynamite and mines
+                if self.level > 5 and not bubble.has_dynamite and not bubble.has_mine:
+                    if random.random() < 0.05:
+                        bubble.has_golden = True
                 
                 # Verify no intersection before adding
                 if not self.check_bubble_intersections(bubble):
@@ -506,6 +517,15 @@ class BubbleShooterGame(Widget):
         bubble.falling = False  # Attached bubbles don't fall
         bubble.vx = 0
         bubble.vy = 0
+        
+        # Check if shot bubble attached directly to a golden bubble (extra score)
+        golden_bonus_given = False
+        if grid_bubble.has_golden:
+            # Give extra score for shooting directly at golden bubble
+            extra_score = 500  # Fixed bonus score of 500
+            self.score += extra_score
+            golden_bonus_given = True
+            print(f"Golden bubble hit! Extra score: {extra_score}, Total score: {self.score}")
         
         # Find the best grid position near the collision point
         new_pos = self.find_nearest_empty_grid_position(bubble, grid_bubble)
@@ -954,6 +974,83 @@ class BubbleShooterGame(Widget):
             print(f"Mine image not found: {mine_path}")
             self.mine_texture = None
     
+    def load_gold_image(self):
+        """Load gold bubble image texture with background removed"""
+        gold_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\gold.jpg"
+        if os.path.exists(gold_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove background
+                    pil_img = PILImage.open(gold_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+                    
+                    width, height = pil_img.size
+                    
+                    # Get corner pixels to determine background color
+                    # Check all four corners
+                    corners = [
+                        pil_img.getpixel((0, 0)),  # Top-left
+                        pil_img.getpixel((width-1, 0)),  # Top-right
+                        pil_img.getpixel((0, height-1)),  # Bottom-left
+                        pil_img.getpixel((width-1, height-1))  # Bottom-right
+                    ]
+                    
+                    # Find the most common corner color (likely the background)
+                    from collections import Counter
+                    corner_colors = [tuple(c[:3]) for c in corners]  # RGB only
+                    bg_color = Counter(corner_colors).most_common(1)[0][0]
+                    
+                    # Get image data
+                    data = pil_img.getdata()
+                    new_data = []
+                    
+                    # Threshold for background color matching (allow slight variations)
+                    threshold = 30
+                    
+                    for item in data:
+                        r, g, b = item[0], item[1], item[2]
+                        bg_r, bg_g, bg_b = bg_color
+                        
+                        # Calculate distance from background color
+                        color_distance = math.sqrt(
+                            (r - bg_r) ** 2 + 
+                            (g - bg_g) ** 2 + 
+                            (b - bg_b) ** 2
+                        )
+                        
+                        # Also check for very light colors (white/light backgrounds)
+                        is_light = r > 240 and g > 240 and b > 240
+                        
+                        # If pixel is close to background color or very light, make it transparent
+                        if color_distance < threshold or is_light:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+                    
+                    pil_img.putdata(new_data)
+                    
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.gold_texture = img.texture
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(gold_path)
+                    self.gold_texture = img.texture
+            except Exception as e:
+                print(f"Error loading gold image: {e}")
+                self.gold_texture = None
+        else:
+            print(f"Gold image not found: {gold_path}")
+            self.gold_texture = None
+    
     def draw_background(self):
         """Draw game background using image"""
         # For levels 6-9, use antique blue background
@@ -1091,6 +1188,49 @@ class BubbleShooterGame(Widget):
                 Line(points=[x, y - mine_size * 0.15, x, y + mine_size * 0.15], width=2)
                 # Exclamation mark dot
                 Ellipse(pos=(x - 2, y + mine_size * 0.2), size=(4, 4))
+        
+        # 7. Draw golden bubble indicator if bubble is golden
+        if bubble.has_golden:
+            if self.gold_texture:
+                # Draw gold image centered on bubble
+                gold_size = radius * 1.6  # Slightly larger than bubble
+                gold_x = x - gold_size / 2
+                gold_y = y - gold_size / 2
+                Color(1, 1, 1, 1)  # White to preserve image colors
+                Rectangle(texture=self.gold_texture,
+                         pos=(gold_x, gold_y),
+                         size=(gold_size, gold_size))
+            else:
+                # Fallback: Draw golden glow/ring if image not loaded
+                golden_ring_width = 3
+                golden_ring_radius = radius + 2
+                
+                # Outer golden glow
+                Color(1, 0.84, 0.0, 0.8)  # Gold color with transparency
+                Line(circle=(x, y, golden_ring_radius), width=golden_ring_width)
+                
+                # Inner golden highlight
+                Color(1, 0.9, 0.3, 0.9)  # Brighter gold
+                Line(circle=(x, y, golden_ring_radius - 1), width=2)
+                
+                # Draw star symbol in center (simplified as small star)
+                star_size = radius * 0.6
+                star_points = []
+                num_points = 5
+                for i in range(num_points * 2):
+                    angle = (i * math.pi / num_points) - math.pi / 2
+                    if i % 2 == 0:
+                        # Outer point
+                        star_radius = star_size / 2
+                    else:
+                        # Inner point
+                        star_radius = star_size / 4
+                    px = x + star_radius * math.cos(angle)
+                    py = y + star_radius * math.sin(angle)
+                    star_points.extend([px, py])
+                
+                Color(1, 0.95, 0.5, 1)  # Bright gold for star
+                Line(points=star_points, width=2, close=True)
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
