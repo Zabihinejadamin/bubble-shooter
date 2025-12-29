@@ -146,8 +146,16 @@ class BubbleShooterGame(Widget):
         if self.grid_spacing < min_spacing:
             self.grid_spacing = min_spacing
         
+        # Check if level has custom pattern method
+        has_custom_pattern = hasattr(self.current_level, 'should_place_bubble')
+        
         for row in range(self.grid_height):
             for col in range(self.grid_width):
+                # Check custom pattern if available
+                if has_custom_pattern:
+                    if not self.current_level.should_place_bubble(row, col):
+                        continue  # Skip this position based on custom pattern
+                
                 # Offset every other row for hexagonal pattern
                 x_offset = (self.grid_spacing * 0.5) if (row % 2 == 1) else 0
                 x = self.grid_start_x + col * self.grid_spacing + x_offset
@@ -326,11 +334,22 @@ class BubbleShooterGame(Widget):
         self.load_next_bubble()
     
     def next_level(self):
-        """Advance to next level (for now, just restart level 1)"""
-        # TODO: Implement level progression
-        # For now, restart level 1
-        from levels.level1 import Level1
-        self.current_level = Level1()
+        """Advance to next level"""
+        # Get current level number and advance to next level
+        current_level_num = self.current_level.level_number
+        
+        if current_level_num == 1:
+            # Advance to Level 2
+            from levels.level2 import Level2
+            self.current_level = Level2()
+        elif current_level_num == 2:
+            # For now, restart Level 2 (can add more levels later)
+            from levels.level2 import Level2
+            self.current_level = Level2()
+        else:
+            # Default: restart current level
+            pass
+        
         self.restart_game()
     
     def update(self, dt):
