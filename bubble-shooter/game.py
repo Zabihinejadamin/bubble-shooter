@@ -45,6 +45,7 @@ class Bubble:
         self.attached = False  # Is bubble attached to grid?
         self.hit_count = 0  # For Earth bubbles (need 2 hits)
         self.has_dynamite = False  # Does this bubble contain dynamite?
+        self.has_mine = False  # Does this bubble contain a mine?
         self.falling = False  # Is bubble falling (disconnected from top)?
         self.gravity = 300  # Gravity acceleration for falling bubbles
     
@@ -168,6 +169,12 @@ class BubbleShooterGame(Widget):
                 # Randomly assign dynamite to ~8% of bubbles
                 if random.random() < 0.08:
                     bubble.has_dynamite = True
+                
+                # Randomly assign mines to ~6% of bubbles (only for level > 2)
+                # Mines and dynamite are mutually exclusive
+                if self.level > 2 and not bubble.has_dynamite:
+                    if random.random() < 0.06:
+                        bubble.has_mine = True
                 
                 # Verify no intersection before adding
                 if not self.check_bubble_intersections(bubble):
@@ -343,9 +350,13 @@ class BubbleShooterGame(Widget):
             from levels.level2 import Level2
             self.current_level = Level2()
         elif current_level_num == 2:
-            # For now, restart Level 2 (can add more levels later)
-            from levels.level2 import Level2
-            self.current_level = Level2()
+            # Advance to Level 3
+            from levels.level3 import Level3
+            self.current_level = Level3()
+        elif current_level_num == 3:
+            # For now, restart Level 3 (can add more levels later)
+            from levels.level3 import Level3
+            self.current_level = Level3()
         else:
             # Default: restart current level
             pass
@@ -583,9 +594,10 @@ class BubbleShooterGame(Widget):
         self.find_connected_matches(bubble, matches, [])
         
         if len(matches) >= 3:
-            # Check if any matched bubble has dynamite
+            # Check if any matched bubble has dynamite or mines
             has_dynamite_explosion = False
             dynamite_positions = []
+            mine_positions = []
             
             # Count how many bubbles will be removed
             exploded_count = 0
@@ -595,6 +607,9 @@ class BubbleShooterGame(Widget):
                     if match.has_dynamite:
                         has_dynamite_explosion = True
                         dynamite_positions.append((match.x, match.y))
+                    # Check for mines before removing
+                    if match.has_mine:
+                        mine_positions.append((match.x, match.y))
                     self.grid_bubbles.remove(match)
                     exploded_count += 1
             
@@ -606,6 +621,11 @@ class BubbleShooterGame(Widget):
             if has_dynamite_explosion:
                 for dynamite_x, dynamite_y in dynamite_positions:
                     self.trigger_dynamite_explosion(dynamite_x, dynamite_y)
+            
+            # Trigger mine explosions if any mines were found
+            if mine_positions:
+                for mine_x, mine_y in mine_positions:
+                    self.trigger_mine_explosion(mine_x, mine_y)
             
             # Check for floating bubbles
             self.check_floating_bubbles()
@@ -650,6 +670,49 @@ class BubbleShooterGame(Widget):
             self.score += exploded_count * self.shots_remaining
         
         # Check for floating bubbles after explosion
+        self.check_floating_bubbles()
+        
+        # Check if all bubbles are cleared (win condition)
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
+    
+    def trigger_mine_explosion(self, x, y):
+        """Trigger mine explosion at position (x, y), removing all bubbles in the same row"""
+        # Find the row (y coordinate) of the mine
+        mine_y = y
+        
+        # Tolerance for determining if bubbles are in the same row
+        # Account for hexagonal grid where rows are spaced by grid_spacing * 0.866
+        # Use half the row spacing as tolerance
+        row_tolerance = self.grid_spacing * 0.4  # Allow tolerance for row detection
+        
+        bubbles_to_explode = []
+        dynamite_to_trigger = []
+        
+        for bubble in self.grid_bubbles[:]:
+            # Check if bubble is in the same row (within tolerance)
+            if abs(bubble.y - mine_y) <= row_tolerance:
+                bubbles_to_explode.append(bubble)
+                # Check if this bubble has dynamite (will trigger after removal)
+                if bubble.has_dynamite:
+                    dynamite_to_trigger.append((bubble.x, bubble.y))
+        
+        # Remove all bubbles in the same row
+        exploded_count = 0
+        for bubble in bubbles_to_explode:
+            if bubble in self.grid_bubbles:
+                self.grid_bubbles.remove(bubble)
+                exploded_count += 1
+        
+        # Trigger dynamite explosions after removing bubbles (to avoid double processing)
+        for dynamite_x, dynamite_y in dynamite_to_trigger:
+            self.trigger_dynamite_explosion(dynamite_x, dynamite_y)
+        
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            self.score += exploded_count * self.shots_remaining
+        
+        # Check for floating bubbles after mine explosion
         self.check_floating_bubbles()
         
         # Check if all bubbles are cleared (win condition)
@@ -900,6 +963,33 @@ class BubbleShooterGame(Widget):
                 # Draw fuse tip (small circle)
                 Color(1, 0.3, 0, 0.9)  # Orange-red for lit fuse
                 Ellipse(pos=(x - 2, fuse_y + fuse_length - 2), size=(4, 4))
+        
+        # 6. Draw mine indicator if bubble has a mine
+        if bubble.has_mine:
+            # Draw mine as a warning triangle with exclamation mark
+            mine_size = radius * 1.8
+            
+            # Draw warning triangle (upside down triangle)
+            triangle_points = [
+                x, y + mine_size * 0.4,  # Top point
+                x - mine_size * 0.5, y - mine_size * 0.3,  # Bottom left
+                x + mine_size * 0.5, y - mine_size * 0.3,  # Bottom right
+            ]
+            Color(1, 0.8, 0, 0.9)  # Yellow-orange warning color
+            Line(points=triangle_points, width=2, close=True)
+            
+            # Fill triangle slightly
+            Color(1, 0.9, 0.3, 0.6)  # Lighter yellow fill
+            # Draw filled triangle using multiple lines (simplified)
+            for i in range(len(triangle_points) // 2 - 1):
+                Line(points=[x, y, triangle_points[i*2], triangle_points[i*2+1]], width=1)
+            
+            # Draw exclamation mark in center
+            Color(1, 0.2, 0.2, 1)  # Red for exclamation
+            # Exclamation mark line
+            Line(points=[x, y - mine_size * 0.15, x, y + mine_size * 0.15], width=2)
+            # Exclamation mark dot
+            Ellipse(pos=(x - 2, y + mine_size * 0.2), size=(4, 4))
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
@@ -986,6 +1076,13 @@ class BubbleShooterGame(Widget):
                      pos=(text_x, text_y), 
                      size=shots_label.texture.size)
             
+            # ===== LEVEL NUMBER (Above Score Box) =====
+            level_text = f'Level {self.level}'
+            level_label = CoreLabel(text=level_text, 
+                                  font_size=18, 
+                                  color=(1, 1, 1, 1))
+            level_label.refresh()
+            
             # ===== SCORE (Bottom Right) =====
             score_text = f'{self.score:,}'  # Add comma formatting
             score_label = CoreLabel(text=score_text, 
@@ -1001,15 +1098,43 @@ class BubbleShooterGame(Widget):
             # Calculate position for bottom right
             score_panel_x = self.width - score_panel_width - 10
             
-            # Shadow
+            # Level number position (above score box)
+            level_y_offset = level_label.texture.size[1] + 5  # Space between level and score box
+            level_panel_y = 10 + score_panel_height + level_y_offset
+            
+            # Draw level number background (small panel above score)
+            level_panel_width = max(score_panel_width, level_label.texture.size[0] + 20)
+            level_panel_height = level_label.texture.size[1] + 8
+            
+            # Level panel shadow
+            Color(0, 0, 0, 0.3)
+            Rectangle(pos=(score_panel_x + 5, level_panel_y - 2), size=(level_panel_width, level_panel_height))
+            
+            # Level panel background
+            Color(0.2, 0.15, 0.3, 0.85)  # Same color as score panel
+            Rectangle(pos=(score_panel_x, level_panel_y), size=(level_panel_width, level_panel_height))
+            
+            # Level panel top highlight
+            Color(0.4, 0.3, 0.5, 0.6)
+            Rectangle(pos=(score_panel_x, level_panel_y + level_panel_height - 3), size=(level_panel_width, 3))
+            
+            # Draw level text (centered in level panel)
+            level_text_x = score_panel_x + (level_panel_width - level_label.texture.size[0]) / 2
+            level_text_y = level_panel_y + 4
+            Color(1, 1, 1, 1)  # White text
+            Rectangle(texture=level_label.texture, 
+                     pos=(level_text_x, level_text_y), 
+                     size=level_label.texture.size)
+            
+            # Score box shadow
             Color(0, 0, 0, 0.3)
             Rectangle(pos=(score_panel_x + 5, 8), size=(score_panel_width, score_panel_height))
             
-            # Main panel background
+            # Score box main panel background
             Color(0.2, 0.15, 0.3, 0.85)  # Dark purple-gray
             Rectangle(pos=(score_panel_x, 10), size=(score_panel_width, score_panel_height))
             
-            # Top highlight
+            # Score box top highlight
             Color(0.4, 0.3, 0.5, 0.6)
             Rectangle(pos=(score_panel_x, 10 + score_panel_height - 3), size=(score_panel_width, 3))
             
