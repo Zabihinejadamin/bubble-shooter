@@ -240,12 +240,21 @@ class BubbleShooterGame(Widget):
         if self.height == 0:
             return False
         
-        # Calculate button positions (matching draw_ui)
+        # Calculate button positions (EXACTLY matching draw_ui)
         center_x = self.width / 2
+        center_y = self.height / 2
+        
+        # Panel dimensions (matching draw_ui)
+        panel_width = 280
+        panel_height = 200
+        panel_x = center_x - panel_width / 2
+        panel_y = center_y - panel_height / 2
+        
+        # Button dimensions and positions (EXACTLY matching draw_ui)
         button_width = 120
         button_height = 45
         button_spacing = 20
-        button_y = self.height / 2 - 100
+        button_y = panel_y + 30  # Match draw_ui exactly
         
         # Retry button position
         retry_x = center_x - button_width - button_spacing / 2
@@ -255,15 +264,22 @@ class BubbleShooterGame(Widget):
         
         won = len(self.grid_bubbles) == 0
         
-        # Check retry button click
-        if (retry_x <= touch.x <= retry_x + button_width and
-            button_y <= touch.y <= button_y + button_height):
+        # Check retry button click - use larger hit area for better responsiveness
+        hit_margin = 5  # Add margin for easier clicking
+        if (retry_x - hit_margin <= touch.x <= retry_x + button_width + hit_margin and
+            button_y - hit_margin <= touch.y <= button_y + button_height + hit_margin):
+            # Immediately show loading and start restart
+            self.is_loading = True
+            self.game_active = False
             self.start_restart()
             return True
         
-        # Check next level button click (only if won)
-        if won and (next_level_x <= touch.x <= next_level_x + button_width and
-                    button_y <= touch.y <= button_y + button_height):
+        # Check next level button click (only if won) - use larger hit area
+        if won and (next_level_x - hit_margin <= touch.x <= next_level_x + button_width + hit_margin and
+                    button_y - hit_margin <= touch.y <= button_y + button_height + hit_margin):
+            # Immediately show loading and start next level
+            self.is_loading = True
+            self.game_active = False
             self.start_next_level()
             return True
         
