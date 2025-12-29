@@ -341,10 +341,6 @@ class BubbleShooterGame(Widget):
         
         if not self.game_active:
             # Still redraw even when game is over to show game over message
-            # Print remaining bubbles if it's zero (in case it wasn't printed before game ended)
-            if len(self.grid_bubbles) == 0 and not hasattr(self, '_zero_printed'):
-                print(f"Remaining bubbles: 0")
-                self._zero_printed = True
             self.canvas.clear()
             with self.canvas:
                 self.draw_background()
@@ -363,15 +359,9 @@ class BubbleShooterGame(Widget):
                 if bubble.y - bubble.radius < 0:
                     # Bubble hit bottom - remove it (score already calculated when it started falling)
                     self.grid_bubbles.remove(bubble)
-                    # Print updated count after removing fallen bubble
-                    current_count = len(self.grid_bubbles)
-                    if current_count != getattr(self, '_prev_bubble_count', -1):
-                        print(f"Remaining bubbles: {current_count}")
-                        self._prev_bubble_count = current_count
                     
                     # Check if all bubbles are cleared (win condition)
                     if len(self.grid_bubbles) == 0:
-                        print(f"Remaining bubbles: 0")  # Print zero before game ends
                         self.game_active = False  # Player wins!
         
         # Update shot bubbles
@@ -421,18 +411,8 @@ class BubbleShooterGame(Widget):
                 self.shot_bubbles.remove(bubble)
                 continue
         
-        # Check for win condition: all bubbles cleared
-        current_count = len(self.grid_bubbles)
-        if current_count == 0:
-            # Print zero immediately if it wasn't printed yet (should have been printed above, but ensure it)
-            if self._prev_bubble_count != 0:
-                print(f"Remaining bubbles: 0")
-                self._prev_bubble_count = 0
-            if not self.has_moving_bubbles():
-                self.game_active = False
-        
         # Check for game over condition: all shots used, bubbles still on screen, and no bubbles moving
-        elif self.shots_remaining <= 0 and len(self.grid_bubbles) > 0:
+        if self.shots_remaining <= 0 and len(self.grid_bubbles) > 0:
             if not self.has_moving_bubbles():
                 self.game_active = False
         
@@ -474,9 +454,6 @@ class BubbleShooterGame(Widget):
             self.grid_bubbles.append(bubble)
             # Check for matches
             self.check_matches(bubble)
-            # Count and print remaining bubbles directly after this shot is processed
-            remaining_count = len(self.grid_bubbles)
-            print(f"Remaining bubbles: {remaining_count}")
         else:
             # If still intersecting, try alternative positions
             alt_pos = self.find_alternative_position(bubble, grid_bubble)
@@ -487,9 +464,6 @@ class BubbleShooterGame(Widget):
                 self.shot_bubbles.remove(bubble)
                 self.grid_bubbles.append(bubble)
                 self.check_matches(bubble)
-                # Count and print remaining bubbles directly after this shot is processed
-                remaining_count = len(self.grid_bubbles)
-                print(f"Remaining bubbles: {remaining_count}")
             else:
                 # Last resort: remove the shot bubble if no valid position
                 self.shot_bubbles.remove(bubble)
@@ -612,7 +586,6 @@ class BubbleShooterGame(Widget):
             
             # Check if all bubbles are cleared (win condition)
             if len(self.grid_bubbles) == 0:
-                print(f"Remaining bubbles: 0")  # Print zero before game ends
                 self.game_active = False  # Player wins!
     
     def get_dynamite_radius(self):
@@ -655,7 +628,6 @@ class BubbleShooterGame(Widget):
         
         # Check if all bubbles are cleared (win condition)
         if len(self.grid_bubbles) == 0:
-            print(f"Remaining bubbles: 0")  # Print zero before game ends
             self.game_active = False  # Player wins!
     
     def find_connected_matches(self, bubble, matches, visited):
@@ -707,7 +679,6 @@ class BubbleShooterGame(Widget):
             
             # Check if all bubbles are cleared (win condition)
             if len(self.grid_bubbles) == 0:
-                print(f"Remaining bubbles: 0")  # Print zero before game ends
                 self.game_active = False  # Player wins!
             return
         
@@ -748,15 +719,9 @@ class BubbleShooterGame(Widget):
         # Calculate score: all falling bubbles * remaining shooting bubbles
         if falling_count > 0:
             self.score += falling_count * self.shots_remaining
-            # Print updated count after marking bubbles as falling (they're still in grid_bubbles)
-            current_count = len(self.grid_bubbles)
-            if current_count != getattr(self, '_prev_bubble_count', -1):
-                print(f"Remaining bubbles: {current_count}")
-                self._prev_bubble_count = current_count
         
         # Check if all bubbles are cleared (win condition)
         if len(self.grid_bubbles) == 0:
-            print(f"Remaining bubbles: 0")  # Print zero before game ends
             self.game_active = False  # Player wins!
     
     def load_background_image(self):
