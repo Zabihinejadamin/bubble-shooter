@@ -14,7 +14,7 @@ Config.set('graphics', 'width', '360')
 Config.set('graphics', 'height', '640')
 
 from game import BubbleShooterGame
-from levels.level3 import Level3
+from levels.level1 import Level1
 
 
 class BubbleShooterApp(App):
@@ -22,11 +22,11 @@ class BubbleShooterApp(App):
     
     def build(self):
         """Build and return the game widget"""
-        # Load Level 3 (for testing)
-        level3 = Level3()
+        # Load Level 1 (start from beginning)
+        level1 = Level1()
         
         # Create game instance with level configuration
-        game = BubbleShooterGame(level=level3)
+        game = BubbleShooterGame(level=level1)
         
         # Schedule game update
         Clock.schedule_interval(game.update, 1.0 / 60.0)  # 60 FPS

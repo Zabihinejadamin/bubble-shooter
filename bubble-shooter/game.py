@@ -326,6 +326,8 @@ class BubbleShooterGame(Widget):
         
         # Reset game state
         self.score = 0
+        self.level = level_config['level_number']  # Update level number
+        self.level_name = level_config['name']  # Update level name
         self.game_active = True
         self.is_loading = False
         self.max_shots = level_config['max_shots']
@@ -358,9 +360,33 @@ class BubbleShooterGame(Widget):
             from levels.level3 import Level3
             self.current_level = Level3()
         elif current_level_num == 3:
-            # For now, restart Level 3 (can add more levels later)
-            from levels.level3 import Level3
-            self.current_level = Level3()
+            # Advance to Level 4
+            from levels.level4 import Level4
+            self.current_level = Level4()
+        elif current_level_num == 4:
+            # Advance to Level 5
+            from levels.level5 import Level5
+            self.current_level = Level5()
+        elif current_level_num == 5:
+            # Advance to Level 6
+            from levels.level6 import Level6
+            self.current_level = Level6()
+        elif current_level_num == 6:
+            # Advance to Level 7
+            from levels.level7 import Level7
+            self.current_level = Level7()
+        elif current_level_num == 7:
+            # Advance to Level 8
+            from levels.level8 import Level8
+            self.current_level = Level8()
+        elif current_level_num == 8:
+            # Advance to Level 9
+            from levels.level9 import Level9
+            self.current_level = Level9()
+        elif current_level_num == 9:
+            # For now, restart Level 9 (can add more levels later)
+            from levels.level9 import Level9
+            self.current_level = Level9()
         else:
             # Default: restart current level
             pass
@@ -930,7 +956,12 @@ class BubbleShooterGame(Widget):
     
     def draw_background(self):
         """Draw game background using image"""
-        if self.background_texture and self.width > 0 and self.height > 0:
+        # For levels 6-9, use antique blue background
+        if self.level >= 6:
+            # Antique blue background for levels 6-9
+            Color(0.35, 0.45, 0.55, 1)  # Antique blue (muted blue-gray)
+            Rectangle(pos=(0, 0), size=(self.width, self.height))
+        elif self.background_texture and self.width > 0 and self.height > 0:
             # Draw background image covering entire screen with darker tint
             Color(0.4, 0.4, 0.4, 1)  # Darker tint (0.4 = 40% brightness)
             Rectangle(texture=self.background_texture, 
@@ -970,19 +1001,31 @@ class BubbleShooterGame(Widget):
         
         # 2. Draw main bubble body - semi-transparent with color tint
         # Real bubbles are mostly transparent with a slight color tint
-        bubble_alpha = 0.3  # Transparency (lower = more transparent)
+        # For levels 6-9, bubbles are opaque (not transparent)
+        if self.level >= 6:
+            bubble_alpha = 1.0  # Opaque for levels 6-9
+        else:
+            bubble_alpha = 0.3  # Transparency (lower = more transparent)
         Color(color[0], color[1], color[2], bubble_alpha)
         Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius * 2))
         
         # 3. Draw thin colored rim/edge (like real bubbles have)
         # Real bubbles have a thin colored edge
         rim_width = 1.5
-        Color(color[0], color[1], color[2], 0.6)  # More opaque on edges
+        if self.level >= 6:
+            rim_alpha = 1.0  # Fully opaque for levels 6-9
+        else:
+            rim_alpha = 0.6  # More opaque on edges
+        Color(color[0], color[1], color[2], rim_alpha)
         Line(circle=(x, y, radius), width=rim_width)
         
         # 4. Draw subtle color rim (prismatic effect on edges)
         # Real bubbles can have color fringing
-        Color(color[0] * 0.8, color[1] * 0.8, color[2] * 0.8, 0.4)
+        if self.level >= 6:
+            fringe_alpha = 0.8  # More opaque for levels 6-9
+        else:
+            fringe_alpha = 0.4
+        Color(color[0] * 0.8, color[1] * 0.8, color[2] * 0.8, fringe_alpha)
         Line(circle=(x, y, radius - 0.5), width=1)
         
         # 5. Draw dynamite indicator if bubble has dynamite
