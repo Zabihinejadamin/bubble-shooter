@@ -85,6 +85,10 @@ class BubbleShooterGame(Widget):
     def __init__(self, level=None, **kwargs):
         super().__init__(**kwargs)
         
+        # Base resolution for scaling (1080x2424)
+        self.base_width = 1080
+        self.base_height = 2424
+        
         # Load level configuration
         if level is None:
             # Default level if none provided
@@ -95,14 +99,20 @@ class BubbleShooterGame(Widget):
         self.current_level = level
         level_config = level.get_config()
         
-        # Game settings from level
-        self.bubble_radius = level_config['bubble_radius']
+        # Store base values from level (will be scaled in on_size)
+        self.base_bubble_radius = level_config['bubble_radius']
         self.grid_width = level_config['grid_width']
         self.grid_height = level_config['grid_height']
-        # Grid spacing must be at least 2 * radius to prevent intersection
-        self.grid_spacing = max(45, self.bubble_radius * 2.2)  # 2.2 * radius ensures no overlap
-        self.grid_start_x = level_config['grid_start_x']
-        self.grid_start_y = level_config['grid_start_y']
+        self.base_grid_spacing = level_config['grid_spacing']
+        self.base_grid_start_x = level_config['grid_start_x']
+        self.base_grid_start_y = level_config['grid_start_y']
+        
+        # Initialize scaled values (will be updated in on_size)
+        # Start with base values - will be scaled when window size is known
+        self.bubble_radius = self.base_bubble_radius
+        self.grid_spacing = self.base_grid_spacing
+        self.grid_start_x = self.base_grid_start_x
+        self.grid_start_y = self.base_grid_start_y
         
         # Game state
         self.score = 0
@@ -118,11 +128,31 @@ class BubbleShooterGame(Widget):
         self.shot_bubbles = []  # Currently shot bubble
         self.next_bubble = None  # Next bubble to shoot
         
-        # Shooter
-        self.shooter_x = 180  # Center of screen (360/2)
-        self.shooter_y = 50  # Bottom of screen (rotated 180 degrees)
+        # Shooter (base values for 1080x2424)
+        self.base_shooter_x = 540  # Center of screen (1080/2)
+        self.base_shooter_y = 150  # Bottom of screen
+        self.base_shooter_length = 120  # Shooter length
+        self.base_bubble_speed = 1200  # Bubble shooting speed
+        self.shooter_x = self.base_shooter_x  # Will be scaled in on_size
+        self.shooter_y = self.base_shooter_y  # Will be scaled in on_size
         self.aim_angle = 90  # Degrees (90 = straight up)
         self.current_bubble = None
+        
+        # UI base values for 1080x2424
+        self.base_panel_width = 840
+        self.base_panel_height = 600
+        self.base_button_width = 360
+        self.base_button_height = 135
+        self.base_button_spacing = 60
+        self.base_font_size_large = 72
+        self.base_font_size_medium = 54
+        self.base_font_size_small = 42
+        
+        # Scale factor (will be calculated in on_size)
+        self.scale = 1.0
+        
+        # Bind to size changes for responsive scaling
+        self.bind(size=self.on_size, pos=self.on_size)
         
         # Background image
         self.background_texture = None
@@ -140,12 +170,78 @@ class BubbleShooterGame(Widget):
         self.gold_texture = None
         self.load_gold_image()
         
-        # Initialize
-        self.initialize_grid()
-        self.load_next_bubble()
+        # Call on_size immediately and also after a short delay to ensure window size is set
+        # This ensures scaling works even if window size is already available
+        self.on_size()
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.on_size(), 0.1)
         
         # Note: on_touch_down, on_touch_move, on_touch_up are automatically
         # connected by Kivy when using these method names
+    
+    def on_size(self, *args):
+        """Handle screen size changes - scale all game elements proportionally"""
+        if self.width == 0 or self.height == 0:
+            return
+        
+        # Calculate scale factors based on base resolution
+        scale_x = self.width / self.base_width
+        scale_y = self.height / self.base_height
+        # Use minimum scale to maintain aspect ratio
+        self.scale = min(scale_x, scale_y)
+        
+        # Scale bubble radius proportionally
+        self.bubble_radius = self.base_bubble_radius * self.scale
+        
+        # Scale grid spacing proportionally
+        self.grid_spacing = self.base_grid_spacing * self.scale
+        
+        # Scale positions based on actual screen dimensions
+        # For X: center the grid on screen
+        # Calculate grid width with scaled spacing
+        grid_width_pixels = (self.grid_width - 1) * self.grid_spacing + self.grid_spacing * 0.5
+        # Center the grid: start at (screen_width - grid_width) / 2
+        # But account for bubble radius on left side
+        self.grid_start_x = (self.width - grid_width_pixels) / 2 + self.bubble_radius
+        
+        # For Y: scale from base position (preserve relative position from level config)
+        # This allows manual positioning adjustments to work correctly
+        self.grid_start_y = self.base_grid_start_y * scale_y
+        
+        # Scale shooter position
+        self.shooter_x = self.width / 2
+        self.shooter_y = self.base_shooter_y * scale_y
+        
+        # Always reinitialize grid with scaled values
+        # Store game state
+        old_score = self.score
+        old_shots = self.shots_remaining
+        old_level = self.level
+        old_level_name = self.level_name
+        
+        # Reinitialize grid with new scaled values
+        self.initialize_grid()
+        
+        # Restore game state
+        self.score = old_score
+        self.shots_remaining = old_shots
+        self.level = old_level
+        self.level_name = old_level_name
+        
+        # Update existing shot bubbles' radius
+        for bubble in self.shot_bubbles:
+            if bubble:
+                bubble.radius = self.bubble_radius
+        
+        # Update current and next bubble radius
+        if self.current_bubble:
+            self.current_bubble.radius = self.bubble_radius
+        if self.next_bubble:
+            self.next_bubble.radius = self.bubble_radius
+        
+        # Load next bubble if needed
+        if self.next_bubble is None:
+            self.load_next_bubble()
         
     def initialize_grid(self):
         """Create initial bubble grid - ensures no intersections"""
@@ -170,6 +266,21 @@ class BubbleShooterGame(Widget):
                 x_offset = (self.grid_spacing * 0.5) if (row % 2 == 1) else 0
                 x = self.grid_start_x + col * self.grid_spacing + x_offset
                 y = self.grid_start_y - row * self.grid_spacing * 0.866
+                
+                # Skip bubbles that would extend beyond screen boundaries (only if width/height are known)
+                if self.width > 0 and self.height > 0:
+                    # Check left boundary (x - radius < 0)
+                    if x - self.bubble_radius < 0:
+                        continue
+                    # Check right boundary (x + radius > width)
+                    if x + self.bubble_radius > self.width:
+                        continue
+                    # Check bottom boundary (y - radius < 0)
+                    if y - self.bubble_radius < 0:
+                        continue
+                    # Check top boundary (y + radius > height)
+                    if y + self.bubble_radius > self.height:
+                        continue
                 
                 element = random.randint(0, 3)
                 bubble = Bubble(x, y, element, self.bubble_radius)
@@ -230,12 +341,12 @@ class BubbleShooterGame(Widget):
                 
                 # Set bubble position at shooter tip before shooting
                 angle_rad = math.radians(self.aim_angle)
-                shooter_length = 40
+                shooter_length = self.base_shooter_length * self.scale
                 self.current_bubble.x = self.shooter_x + math.cos(angle_rad) * shooter_length
                 self.current_bubble.y = self.shooter_y + math.sin(angle_rad) * shooter_length
                 
-                # Normalize direction and set velocity
-                speed = 400  # pixels per second
+                # Normalize direction and set velocity (scaled)
+                speed = self.base_bubble_speed * self.scale
                 self.current_bubble.vx = (dx / distance) * speed
                 self.current_bubble.vy = (dy / distance) * speed
                 
@@ -274,17 +385,17 @@ class BubbleShooterGame(Widget):
         center_x = self.width / 2
         center_y = self.height / 2
         
-        # Panel dimensions (matching draw_ui)
-        panel_width = 280
-        panel_height = 200
+        # Panel dimensions (matching draw_ui) - scaled
+        panel_width = self.base_panel_width * self.scale
+        panel_height = self.base_panel_height * self.scale
         panel_x = center_x - panel_width / 2
         panel_y = center_y - panel_height / 2
         
-        # Button dimensions and positions (EXACTLY matching draw_ui)
-        button_width = 120
-        button_height = 45
-        button_spacing = 20
-        button_y = panel_y + 30  # Match draw_ui exactly
+        # Button dimensions and positions (EXACTLY matching draw_ui) - scaled
+        button_width = self.base_button_width * self.scale
+        button_height = self.base_button_height * self.scale
+        button_spacing = self.base_button_spacing * self.scale
+        button_y = panel_y + 90 * self.scale  # 30 * 3
         
         # Retry button position
         retry_x = center_x - button_width - button_spacing / 2
@@ -295,7 +406,7 @@ class BubbleShooterGame(Widget):
         won = len(self.grid_bubbles) == 0
         
         # Check retry button click - use larger hit area for better responsiveness
-        hit_margin = 5  # Add margin for easier clicking
+        hit_margin = 15 * self.scale  # 5 * 3
         if (retry_x - hit_margin <= touch.x <= retry_x + button_width + hit_margin and
             button_y - hit_margin <= touch.y <= button_y + button_height + hit_margin):
             # Immediately show loading and start restart
@@ -344,17 +455,25 @@ class BubbleShooterGame(Widget):
         self.max_shots = level_config['max_shots']
         self.shots_remaining = level_config['shots_remaining']
         
-        # Reset grid position from level config
-        self.grid_start_x = level_config['grid_start_x']
-        self.grid_start_y = level_config['grid_start_y']
+        # Update base values from level config (in case level changed)
+        self.base_bubble_radius = level_config['bubble_radius']
+        self.grid_width = level_config['grid_width']
+        self.grid_height = level_config['grid_height']
+        self.base_grid_spacing = level_config['grid_spacing']
+        self.base_grid_start_x = level_config['grid_start_x']
+        self.base_grid_start_y = level_config['grid_start_y']
         
         # Clear bubbles
         self.grid_bubbles = []
         self.shot_bubbles = []
         self.current_bubble = None
+        self.next_bubble = None
         
-        # Reinitialize
-        self.initialize_grid()
+        # Recalculate scaling and reinitialize grid with scaled values
+        # This ensures positions and sizes are correct
+        self.on_size()
+        
+        # Load next bubble
         self.load_next_bubble()
     
     def next_level(self):
@@ -408,15 +527,9 @@ class BubbleShooterGame(Widget):
         """Update game state (called every frame)"""
         # Update shooter position to bottom center of screen (rotated 180 degrees)
         if self.height > 0:
-            self.shooter_y = 50  # Position near bottom
+            # Shooter position is set in on_size, don't override it here
             self.shooter_x = self.width / 2  # Center horizontally
-            # Don't override grid_start_x and grid_start_y - they should remain from level config
-            # Only update if they haven't been set yet (initial load)
-            if not hasattr(self, '_grid_position_initialized'):
-                level_config = self.current_level.get_config()
-                self.grid_start_x = level_config['grid_start_x']
-                self.grid_start_y = level_config['grid_start_y']
-                self._grid_position_initialized = True
+            # Grid positions are scaled in on_size, don't override them here
         
         if self.is_loading:
             # Show loading screen
@@ -868,10 +981,32 @@ class BubbleShooterGame(Widget):
             print(f"Remaining bubbles: 0")
             self.game_active = False  # Player wins!
     
+    def get_asset_path(self, filename):
+        """Get asset path that works on both desktop and Android"""
+        # Try multiple possible paths
+        possible_paths = [
+            os.path.join("asset", filename),  # Relative path (works on Android)
+            os.path.join(".", "asset", filename),  # Current directory
+            os.path.join(os.path.dirname(__file__), "asset", filename),  # Same dir as game.py
+            os.path.join(os.getcwd(), "asset", filename),  # Current working directory
+        ]
+        
+        # On Windows, also try the original hardcoded path as fallback
+        if os.name == 'nt':
+            possible_paths.append(
+                r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\{}".format(filename)
+            )
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        
+        return None
+    
     def load_background_image(self):
         """Load background image texture"""
-        background_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\grunge-white-surface-rough-background-textured.jpg"
-        if os.path.exists(background_path):
+        background_path = self.get_asset_path("grunge-white-surface-rough-background-textured.jpg")
+        if background_path and os.path.exists(background_path):
             try:
                 img = CoreImage(background_path)
                 self.background_texture = img.texture
@@ -879,13 +1014,13 @@ class BubbleShooterGame(Widget):
                 print(f"Error loading background image: {e}")
                 self.background_texture = None
         else:
-            print(f"Background image not found: {background_path}")
+            print(f"Background image not found: grunge-white-surface-rough-background-textured.jpg")
             self.background_texture = None
     
     def load_dynamite_image(self):
         """Load dynamite image texture with white background removed"""
-        dynamite_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\istockphoto-1139873743-612x612.jpg"
-        if os.path.exists(dynamite_path):
+        dynamite_path = self.get_asset_path("istockphoto-1139873743-612x612.jpg")
+        if dynamite_path and os.path.exists(dynamite_path):
             try:
                 if PIL_AVAILABLE:
                     # Use PIL to remove white background
@@ -925,13 +1060,13 @@ class BubbleShooterGame(Widget):
                 print(f"Error loading dynamite image: {e}")
                 self.dynamite_texture = None
         else:
-            print(f"Dynamite image not found: {dynamite_path}")
+            print(f"Dynamite image not found: istockphoto-1139873743-612x612.jpg")
             self.dynamite_texture = None
     
     def load_mine_image(self):
         """Load mine image texture with white background removed"""
-        mine_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\istockphoto-1474907248-612x612.jpg"
-        if os.path.exists(mine_path):
+        mine_path = self.get_asset_path("istockphoto-1474907248-612x612.jpg")
+        if mine_path and os.path.exists(mine_path):
             try:
                 if PIL_AVAILABLE:
                     # Use PIL to remove white background
@@ -971,13 +1106,13 @@ class BubbleShooterGame(Widget):
                 print(f"Error loading mine image: {e}")
                 self.mine_texture = None
         else:
-            print(f"Mine image not found: {mine_path}")
+            print(f"Mine image not found: istockphoto-1474907248-612x612.jpg")
             self.mine_texture = None
     
     def load_gold_image(self):
         """Load gold bubble image texture with background removed"""
-        gold_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\gold.jpg"
-        if os.path.exists(gold_path):
+        gold_path = self.get_asset_path("gold.jpg")
+        if gold_path and os.path.exists(gold_path):
             try:
                 if PIL_AVAILABLE:
                     # Use PIL to remove background
@@ -1123,7 +1258,7 @@ class BubbleShooterGame(Widget):
         else:
             fringe_alpha = 0.4
         Color(color[0] * 0.8, color[1] * 0.8, color[2] * 0.8, fringe_alpha)
-        Line(circle=(x, y, radius - 0.5), width=1)
+        Line(circle=(x, y, radius - 0.5), width=3 * self.scale)  # 1 * 3
         
         # 5. Draw dynamite indicator if bubble has dynamite
         if bubble.has_dynamite:
@@ -1149,10 +1284,11 @@ class BubbleShooterGame(Widget):
                 fuse_length = radius * 0.3
                 fuse_y = stick_y + stick_height
                 Color(0.8, 0.8, 0.3, 0.9)  # Yellow/light color for fuse
-                Line(points=[x, fuse_y, x, fuse_y + fuse_length], width=2)
+                Line(points=[x, fuse_y, x, fuse_y + fuse_length], width=6 * self.scale)  # 2 * 3
                 # Draw fuse tip (small circle)
                 Color(1, 0.3, 0, 0.9)  # Orange-red for lit fuse
-                Ellipse(pos=(x - 2, fuse_y + fuse_length - 2), size=(4, 4))
+                tip_size = 6 * self.scale  # 2 * 3
+                Ellipse(pos=(x - tip_size, fuse_y + fuse_length - tip_size), size=(tip_size * 2, tip_size * 2))
         
         # 6. Draw mine indicator if bubble has a mine
         if bubble.has_mine:
@@ -1174,20 +1310,21 @@ class BubbleShooterGame(Widget):
                     x + mine_size * 0.5, y - mine_size * 0.3,  # Bottom right
                 ]
                 Color(1, 0.8, 0, 0.9)  # Yellow-orange warning color
-                Line(points=triangle_points, width=2, close=True)
+                Line(points=triangle_points, width=6 * self.scale, close=True)  # 2 * 3
                 
                 # Fill triangle slightly
                 Color(1, 0.9, 0.3, 0.6)  # Lighter yellow fill
                 # Draw filled triangle using multiple lines (simplified)
                 for i in range(len(triangle_points) // 2 - 1):
-                    Line(points=[x, y, triangle_points[i*2], triangle_points[i*2+1]], width=1)
+                    Line(points=[x, y, triangle_points[i*2], triangle_points[i*2+1]], width=3 * self.scale)  # 1 * 3
                 
                 # Draw exclamation mark in center
                 Color(1, 0.2, 0.2, 1)  # Red for exclamation
                 # Exclamation mark line
-                Line(points=[x, y - mine_size * 0.15, x, y + mine_size * 0.15], width=2)
+                Line(points=[x, y - mine_size * 0.15, x, y + mine_size * 0.15], width=6 * self.scale)  # 2 * 3
                 # Exclamation mark dot
-                Ellipse(pos=(x - 2, y + mine_size * 0.2), size=(4, 4))
+                dot_size = 6 * self.scale  # 2 * 3
+                Ellipse(pos=(x - dot_size, y + mine_size * 0.2 - dot_size), size=(dot_size * 2, dot_size * 2))
         
         # 7. Draw golden bubble indicator if bubble is golden
         if bubble.has_golden:
@@ -1202,8 +1339,8 @@ class BubbleShooterGame(Widget):
                          size=(gold_size, gold_size))
             else:
                 # Fallback: Draw golden glow/ring if image not loaded
-                golden_ring_width = 3
-                golden_ring_radius = radius + 2
+                golden_ring_width = 9 * self.scale  # 3 * 3
+                golden_ring_radius = radius + 6 * self.scale  # 2 * 3
                 
                 # Outer golden glow
                 Color(1, 0.84, 0.0, 0.8)  # Gold color with transparency
@@ -1211,7 +1348,7 @@ class BubbleShooterGame(Widget):
                 
                 # Inner golden highlight
                 Color(1, 0.9, 0.3, 0.9)  # Brighter gold
-                Line(circle=(x, y, golden_ring_radius - 1), width=2)
+                Line(circle=(x, y, golden_ring_radius - 3 * self.scale), width=6 * self.scale)  # 2 * 3
                 
                 # Draw star symbol in center (simplified as small star)
                 star_size = radius * 0.6
@@ -1230,13 +1367,15 @@ class BubbleShooterGame(Widget):
                     star_points.extend([px, py])
                 
                 Color(1, 0.95, 0.5, 1)  # Bright gold for star
-                Line(points=star_points, width=2, close=True)
+                Line(points=star_points, width=6 * self.scale, close=True)  # 2 * 3
     
     def draw_shooter(self):
         """Draw shooter and current bubble with 3D effects"""
         x, y = self.shooter_x, self.shooter_y
-        shooter_length = 40
-        shooter_width = 8
+        shooter_length = self.base_shooter_length * self.scale
+        shooter_width = 24 * self.scale  # 8 * 3
+        base_radius = 45 * self.scale  # 15 * 3
+        tip_radius = 15 * self.scale  # 5 * 3
         
         # Convert angle to radians
         angle_rad = math.radians(self.aim_angle)
@@ -1247,7 +1386,7 @@ class BubbleShooterGame(Widget):
         
         # Draw shooter base/cannon (circular base)
         Color(0.3, 0.3, 0.3)  # Dark gray
-        Ellipse(pos=(x - 15, y - 15), size=(30, 30))
+        Ellipse(pos=(x - base_radius, y - base_radius), size=(base_radius * 2, base_radius * 2))
         
         # Draw shooter barrel (rotating)
         # Use PushMatrix/PopMatrix for rotation (simulated with line)
@@ -1256,7 +1395,7 @@ class BubbleShooterGame(Widget):
         
         # Draw shooter tip (small circle at end)
         Color(0.4, 0.4, 0.4)  # Slightly darker gray
-        Ellipse(pos=(end_x - 5, end_y - 5), size=(10, 10))
+        Ellipse(pos=(end_x - tip_radius, end_y - tip_radius), size=(tip_radius * 2, tip_radius * 2))
         
         # Draw current bubble with 3D effect (positioned at shooter tip)
         if self.current_bubble and not self.current_bubble.attached:
@@ -1264,12 +1403,12 @@ class BubbleShooterGame(Widget):
             self.draw_bubble_3d(self.current_bubble, x=end_x, y=end_y)
         
         # Draw aim line (shows current aim direction)
-        aim_line_length = 100
+        aim_line_length = 300 * self.scale  # 100 * 3
         aim_end_x = x + math.cos(angle_rad) * aim_line_length
         aim_end_y = y + math.sin(angle_rad) * aim_line_length
         
         Color(1, 1, 1, 0.4)  # White, semi-transparent
-        Line(points=[x, y, aim_end_x, aim_end_y], width=2)
+        Line(points=[x, y, aim_end_x, aim_end_y], width=6 * self.scale)  # 2 * 3
     
     def draw_ui(self):
         """Draw UI elements with beautiful design"""
@@ -1279,39 +1418,42 @@ class BubbleShooterGame(Widget):
             
             # ===== SHOTS REMAINING (Bottom Left) =====
             shots_text = f'{display_shots}/{self.max_shots}'
+            font_size = self.base_font_size_large * self.scale
             shots_label = CoreLabel(text=shots_text, 
-                                  font_size=24, 
+                                  font_size=font_size, 
                                   color=(1, 1, 1, 1))
             shots_label.refresh()
             
             # Draw background panel with rounded corners effect
-            panel_padding = 12
+            panel_padding = 36 * self.scale  # 12 * 3
             panel_height = shots_label.texture.size[1] + panel_padding * 2
-            panel_width = shots_label.texture.size[0] + panel_padding * 2 + 60  # Extra space for icon
+            panel_width = shots_label.texture.size[0] + panel_padding * 2 + 180 * self.scale  # Extra space for icon
             
             # Shadow
             Color(0, 0, 0, 0.3)
-            Rectangle(pos=(15, 8), size=(panel_width, panel_height))
+            Rectangle(pos=(45 * self.scale, 24 * self.scale), size=(panel_width, panel_height))
             
             # Main panel background (gradient effect with darker bottom)
             Color(0.15, 0.2, 0.3, 0.85)  # Dark blue-gray
-            Rectangle(pos=(10, 10), size=(panel_width, panel_height))
+            Rectangle(pos=(30 * self.scale, 30 * self.scale), size=(panel_width, panel_height))
             
             # Top highlight
             Color(0.3, 0.4, 0.5, 0.6)
-            Rectangle(pos=(10, 10 + panel_height - 3), size=(panel_width, 3))
+            Rectangle(pos=(30 * self.scale, 30 * self.scale + panel_height - 9 * self.scale), size=(panel_width, 9 * self.scale))
             
             # Draw icon circle (bullet/target icon representation)
-            icon_x = 10 + panel_padding + 15
-            icon_y = 10 + panel_height / 2
+            icon_x = 30 * self.scale + panel_padding + 45 * self.scale
+            icon_y = 30 * self.scale + panel_height / 2
+            icon_radius = 36 * self.scale  # 12 * 3
             Color(1, 0.7, 0.2, 0.9)  # Gold/orange
-            Ellipse(pos=(icon_x - 12, icon_y - 12), size=(24, 24))
+            Ellipse(pos=(icon_x - icon_radius, icon_y - icon_radius), size=(icon_radius * 2, icon_radius * 2))
             Color(1, 0.9, 0.5, 1)  # Lighter gold
-            Ellipse(pos=(icon_x - 8, icon_y - 8), size=(16, 16))
+            inner_radius = 24 * self.scale  # 8 * 3
+            Ellipse(pos=(icon_x - inner_radius, icon_y - inner_radius), size=(inner_radius * 2, inner_radius * 2))
             
             # Draw shots text
-            text_x = icon_x + 20
-            text_y = 10 + panel_padding
+            text_x = icon_x + 60 * self.scale  # 20 * 3
+            text_y = 30 * self.scale + panel_padding
             Color(1, 1, 1, 1)  # White text
             Rectangle(texture=shots_label.texture, 
                      pos=(text_x, text_y), 
@@ -1319,37 +1461,39 @@ class BubbleShooterGame(Widget):
             
             # ===== LEVEL NUMBER (Above Score Box) =====
             level_text = f'Level {self.level}'
+            level_font_size = self.base_font_size_medium * self.scale
             level_label = CoreLabel(text=level_text, 
-                                  font_size=18, 
+                                  font_size=level_font_size, 
                                   color=(1, 1, 1, 1))
             level_label.refresh()
             
             # ===== SCORE (Bottom Right) =====
             score_text = f'{self.score:,}'  # Add comma formatting
+            score_font_size = self.base_font_size_large * self.scale
             score_label = CoreLabel(text=score_text, 
-                                  font_size=24, 
+                                  font_size=score_font_size, 
                                   color=(1, 1, 1, 1))
             score_label.refresh()
             
             # Score panel dimensions
-            score_panel_padding = 12
+            score_panel_padding = 24 * self.scale  # Reduced from 36
             score_panel_height = score_label.texture.size[1] + score_panel_padding * 2
-            score_panel_width = score_label.texture.size[0] + score_panel_padding * 2 + 60 + 80  # Extra space for stars + 80  # Extra space for stars
+            score_panel_width = score_label.texture.size[0] + score_panel_padding * 2 + 120 * self.scale + 160 * self.scale  # Reduced extra space for stars (from 180+240)
             
             # Calculate position for bottom right
-            score_panel_x = self.width - score_panel_width - 10
+            score_panel_x = self.width - score_panel_width - 30 * self.scale
             
             # Level number position (above score box)
-            level_y_offset = level_label.texture.size[1] + 5  # Space between level and score box
-            level_panel_y = 10 + score_panel_height + level_y_offset
+            level_y_offset = level_label.texture.size[1] + 15 * self.scale  # Space between level and score box
+            level_panel_y = 30 * self.scale + score_panel_height + level_y_offset
             
-            # Draw level number background (small panel above score)
-            level_panel_width = max(score_panel_width, level_label.texture.size[0] + 20)
-            level_panel_height = level_label.texture.size[1] + 8
+            # Draw level number background (small panel above score) - use only text width, not score panel width
+            level_panel_width = level_label.texture.size[0] + 40 * self.scale  # Reduced from 60, and no longer matches score panel width
+            level_panel_height = level_label.texture.size[1] + 18 * self.scale  # Reduced from 24
             
             # Level panel shadow
             Color(0, 0, 0, 0.3)
-            Rectangle(pos=(score_panel_x + 5, level_panel_y - 2), size=(level_panel_width, level_panel_height))
+            Rectangle(pos=(score_panel_x + 15 * self.scale, level_panel_y - 6 * self.scale), size=(level_panel_width, level_panel_height))
             
             # Level panel background
             Color(0.2, 0.15, 0.3, 0.85)  # Same color as score panel
@@ -1357,11 +1501,11 @@ class BubbleShooterGame(Widget):
             
             # Level panel top highlight
             Color(0.4, 0.3, 0.5, 0.6)
-            Rectangle(pos=(score_panel_x, level_panel_y + level_panel_height - 3), size=(level_panel_width, 3))
+            Rectangle(pos=(score_panel_x, level_panel_y + level_panel_height - 9 * self.scale), size=(level_panel_width, 9 * self.scale))
             
             # Draw level text (centered in level panel)
             level_text_x = score_panel_x + (level_panel_width - level_label.texture.size[0]) / 2
-            level_text_y = level_panel_y + 4
+            level_text_y = level_panel_y + 12 * self.scale
             Color(1, 1, 1, 1)  # White text
             Rectangle(texture=level_label.texture, 
                      pos=(level_text_x, level_text_y), 
@@ -1369,45 +1513,40 @@ class BubbleShooterGame(Widget):
             
             # Score box shadow
             Color(0, 0, 0, 0.3)
-            Rectangle(pos=(score_panel_x + 5, 8), size=(score_panel_width, score_panel_height))
+            Rectangle(pos=(score_panel_x + 15 * self.scale, 24 * self.scale), size=(score_panel_width, score_panel_height))
             
             # Score box main panel background
             Color(0.2, 0.15, 0.3, 0.85)  # Dark purple-gray
-            Rectangle(pos=(score_panel_x, 10), size=(score_panel_width, score_panel_height))
+            Rectangle(pos=(score_panel_x, 30 * self.scale), size=(score_panel_width, score_panel_height))
             
             # Score box top highlight
             Color(0.4, 0.3, 0.5, 0.6)
-            Rectangle(pos=(score_panel_x, 10 + score_panel_height - 3), size=(score_panel_width, 3))
+            Rectangle(pos=(score_panel_x, 30 * self.scale + score_panel_height - 9 * self.scale), size=(score_panel_width, 9 * self.scale))
             
             # Draw star/medal icon
-            score_icon_x = score_panel_x + score_panel_padding + 15
-            score_icon_y = 10 + score_panel_height / 2
+            score_icon_x = score_panel_x + score_panel_padding + 45 * self.scale
+            score_icon_y = 30 * self.scale + score_panel_height / 2
+            icon_radius = 30 * self.scale  # 10 * 3
             Color(1, 0.8, 0.2, 0.9)  # Gold
-            # Draw star shape (simplified as diamond)
-            star_points = [
-                score_icon_x, score_icon_y + 10,  # Top
-                score_icon_x - 8, score_icon_y,  # Left
-                score_icon_x, score_icon_y - 10,  # Bottom
-                score_icon_x + 8, score_icon_y,  # Right
-            ]
-            # Draw filled star using triangles (simplified as circle with highlight)
-            Ellipse(pos=(score_icon_x - 10, score_icon_y - 10), size=(20, 20))
+            # Draw filled star using circles (simplified)
+            Ellipse(pos=(score_icon_x - icon_radius, score_icon_y - icon_radius), size=(icon_radius * 2, icon_radius * 2))
             Color(1, 0.95, 0.5, 1)  # Lighter gold
-            Ellipse(pos=(score_icon_x - 6, score_icon_y - 6), size=(12, 12))
+            inner_radius = 18 * self.scale  # 6 * 3
+            Ellipse(pos=(score_icon_x - inner_radius, score_icon_y - inner_radius), size=(inner_radius * 2, inner_radius * 2))
             
             # Draw score text
-            score_text_x = score_icon_x + 20
-            score_text_y = 10 + score_panel_padding
+            score_text_x = score_icon_x + 60 * self.scale  # 20 * 3
+            score_text_y = 30 * self.scale + score_panel_padding
             Color(1, 1, 1, 1)  # White text
             Rectangle(texture=score_label.texture, 
                      pos=(score_text_x, score_text_y), 
                      size=score_label.texture.size)
             
             # Draw three achievement stars next to score
-            stars_start_x = score_text_x + score_label.texture.size[0] + 15
-            stars_y = 10 + score_panel_height / 2
-            star_size = 16
-            star_spacing = 20
+            stars_start_x = score_text_x + score_label.texture.size[0] + 45 * self.scale
+            stars_y = 30 * self.scale + score_panel_height / 2
+            star_size = 48 * self.scale  # 16 * 3
+            star_spacing = 60 * self.scale  # 20 * 3
             
             for i in range(3):
                 star_x = stars_start_x + i * star_spacing
@@ -1452,14 +1591,14 @@ class BubbleShooterGame(Widget):
                     # Draw glow (simplified as filled shape)
                     for k in range(len(glow_points) // 2 - 1):
                         Line(points=[glow_points[k*2], glow_points[k*2+1], 
-                                    glow_points[(k+1)*2], glow_points[(k+1)*2+1]], width=3)
+                                    glow_points[(k+1)*2], glow_points[(k+1)*2+1]], width=9 * self.scale)  # 3 * 3
                     
                     # Gold star - main
                     Color(1, 0.85, 0.3, 1)  # Bright gold
-                    Line(points=star_points, width=2, close=True)
+                    Line(points=star_points, width=6 * self.scale, close=True)  # 2 * 3
                     # Fill star (simplified - draw lines to center)
                     for k in range(0, len(star_points), 2):
-                        Line(points=[star_x, star_center_y, star_points[k], star_points[k+1]], width=1)
+                        Line(points=[star_x, star_center_y, star_points[k], star_points[k+1]], width=3 * self.scale)  # 1 * 3
                     
                     # Gold star - highlight (inner glow)
                     Color(1, 0.95, 0.6, 0.8)  # Light gold
@@ -1469,10 +1608,10 @@ class BubbleShooterGame(Widget):
                 else:
                     # Gray star - outer
                     Color(0.3, 0.3, 0.3, 0.5)  # Dark gray with transparency
-                    Line(points=star_points, width=2, close=True)
+                    Line(points=star_points, width=6 * self.scale, close=True)  # 2 * 3
                     # Fill star
                     for k in range(0, len(star_points), 2):
-                        Line(points=[star_x, star_center_y, star_points[k], star_points[k+1]], width=1)
+                        Line(points=[star_x, star_center_y, star_points[k], star_points[k+1]], width=3 * self.scale)  # 1 * 3
                     
                     # Gray star - inner
                     Color(0.5, 0.5, 0.5, 0.6)  # Lighter gray
@@ -1492,15 +1631,15 @@ class BubbleShooterGame(Widget):
                 Color(0, 0, 0, 0.75)  # Dark semi-transparent overlay
                 Rectangle(pos=(0, 0), size=(self.width, self.height))
                 
-                # Draw main panel background with shadow
-                panel_width = 280
-                panel_height = 200
+                # Draw main panel background with shadow - scaled
+                panel_width = self.base_panel_width * self.scale
+                panel_height = self.base_panel_height * self.scale
                 panel_x = center_x - panel_width / 2
                 panel_y = center_y - panel_height / 2
                 
                 # Shadow
                 Color(0, 0, 0, 0.5)
-                Rectangle(pos=(panel_x + 5, panel_y - 5), size=(panel_width, panel_height))
+                Rectangle(pos=(panel_x + 15 * self.scale, panel_y - 15 * self.scale), size=(panel_width, panel_height))
                 
                 # Main panel background
                 if won:
@@ -1511,14 +1650,14 @@ class BubbleShooterGame(Widget):
                 
                 # Panel border
                 Color(1, 1, 1, 0.3)
-                Line(rectangle=(panel_x, panel_y, panel_width, panel_height), width=2)
+                Line(rectangle=(panel_x, panel_y, panel_width, panel_height), width=6 * self.scale)
                 
                 # Top highlight
                 if won:
                     Color(0.2, 0.6, 0.4, 0.8)
                 else:
                     Color(0.6, 0.2, 0.2, 0.8)
-                Rectangle(pos=(panel_x, panel_y + panel_height - 5), size=(panel_width, 5))
+                Rectangle(pos=(panel_x, panel_y + panel_height - 15 * self.scale), size=(panel_width, 15 * self.scale))
                 
                 # Draw title
                 if won:
@@ -1528,12 +1667,13 @@ class BubbleShooterGame(Widget):
                     title_text = 'GAME OVER'
                     title_color = (1, 0.3, 0.3, 1)  # Bright red
                 
+                title_font_size = 96 * self.scale  # 32 * 3
                 title_label = CoreLabel(text=title_text, 
-                                      font_size=32, 
+                                      font_size=title_font_size, 
                                       color=title_color)
                 title_label.refresh()
                 title_x = center_x - title_label.texture.size[0] / 2
-                title_y = panel_y + panel_height - 50
+                title_y = panel_y + panel_height - 150 * self.scale  # 50 * 3
                 Color(1, 1, 1, 1)
                 Rectangle(texture=title_label.texture,
                          pos=(title_x, title_y),
@@ -1541,22 +1681,23 @@ class BubbleShooterGame(Widget):
                 
                 # Draw score display
                 score_text = f'Final Score: {self.score:,}'
+                score_font_size = 60 * self.scale  # 20 * 3
                 score_label = CoreLabel(text=score_text,
-                                      font_size=20,
+                                      font_size=score_font_size,
                                       color=(1, 1, 1, 1))
                 score_label.refresh()
                 score_x = center_x - score_label.texture.size[0] / 2
-                score_y = title_y - 35
+                score_y = title_y - 105 * self.scale  # 35 * 3
                 Color(1, 1, 1, 1)
                 Rectangle(texture=score_label.texture,
                          pos=(score_x, score_y),
                          size=score_label.texture.size)
                 
-                # Draw buttons
-                button_width = 120
-                button_height = 45
-                button_spacing = 20
-                button_y = panel_y + 30
+                # Draw buttons - scaled
+                button_width = self.base_button_width * self.scale
+                button_height = self.base_button_height * self.scale
+                button_spacing = self.base_button_spacing * self.scale
+                button_y = panel_y + 90 * self.scale  # 30 * 3
                 
                 # Retry button
                 retry_x = center_x - button_width - button_spacing / 2
@@ -1578,15 +1719,15 @@ class BubbleShooterGame(Widget):
         Color(0, 0, 0, 0.85)  # Darker overlay for loading
         Rectangle(pos=(0, 0), size=(self.width, self.height))
         
-        # Draw loading panel
-        panel_width = 250
-        panel_height = 150
+        # Draw loading panel - scaled
+        panel_width = 750 * self.scale  # 250 * 3
+        panel_height = 450 * self.scale  # 150 * 3
         panel_x = center_x - panel_width / 2
         panel_y = center_y - panel_height / 2
         
         # Shadow
         Color(0, 0, 0, 0.5)
-        Rectangle(pos=(panel_x + 5, panel_y - 5), size=(panel_width, panel_height))
+        Rectangle(pos=(panel_x + 15 * self.scale, panel_y - 15 * self.scale), size=(panel_width, panel_height))
         
         # Main panel background
         Color(0.15, 0.15, 0.2, 0.95)  # Dark blue-gray
@@ -1594,28 +1735,29 @@ class BubbleShooterGame(Widget):
         
         # Panel border
         Color(1, 1, 1, 0.3)
-        Line(rectangle=(panel_x, panel_y, panel_width, panel_height), width=2)
+        Line(rectangle=(panel_x, panel_y, panel_width, panel_height), width=6 * self.scale)
         
         # Top highlight
         Color(0.3, 0.4, 0.6, 0.8)
-        Rectangle(pos=(panel_x, panel_y + panel_height - 5), size=(panel_width, 5))
+        Rectangle(pos=(panel_x, panel_y + panel_height - 15 * self.scale), size=(panel_width, 15 * self.scale))
         
         # Draw "Loading..." text
+        loading_font_size = 84 * self.scale  # 28 * 3
         loading_label = CoreLabel(text='Loading...', 
-                                 font_size=28, 
+                                 font_size=loading_font_size, 
                                  color=(1, 1, 1, 1))
         loading_label.refresh()
         loading_x = center_x - loading_label.texture.size[0] / 2
-        loading_y = panel_y + panel_height - 50
+        loading_y = panel_y + panel_height - 150 * self.scale  # 50 * 3
         Color(1, 1, 1, 1)
         Rectangle(texture=loading_label.texture,
                  pos=(loading_x, loading_y),
                  size=loading_label.texture.size)
         
-        # Draw animated loading spinner (simple pulsing dots)
-        spinner_y = panel_y + 60
-        spinner_radius = 8
-        spinner_spacing = 20
+        # Draw animated loading spinner (simple pulsing dots) - scaled
+        spinner_y = panel_y + 180 * self.scale  # 60 * 3
+        spinner_radius = 24 * self.scale  # 8 * 3
+        spinner_spacing = 60 * self.scale  # 20 * 3
         spinner_start_x = center_x - (spinner_spacing * 2)
         
         # Animate spinner based on time (simple pulsing effect)
@@ -1635,7 +1777,8 @@ class BubbleShooterGame(Widget):
         """Draw a beautiful button"""
         # Shadow
         Color(0, 0, 0, 0.4)
-        Rectangle(pos=(x + 2, y - 2), size=(width, height))
+        shadow_offset = 6 * self.scale  # 2 * 3
+        Rectangle(pos=(x + shadow_offset, y - shadow_offset), size=(width, height))
         
         # Button background
         Color(color[0], color[1], color[2], color[3])
@@ -1643,14 +1786,15 @@ class BubbleShooterGame(Widget):
         
         # Button border
         Color(1, 1, 1, 0.3)
-        Line(rectangle=(x, y, width, height), width=2)
+        Line(rectangle=(x, y, width, height), width=6 * self.scale)  # 2 * 3
         
         # Top highlight
         Color(1, 1, 1, 0.2)
-        Rectangle(pos=(x, y + height - 3), size=(width, 3))
+        Rectangle(pos=(x, y + height - 9 * self.scale), size=(width, 9 * self.scale))  # 3 * 3
         
         # Button text
-        text_label = CoreLabel(text=text, font_size=20, color=(1, 1, 1, 1))
+        button_font_size = 60 * self.scale  # 20 * 3
+        text_label = CoreLabel(text=text, font_size=button_font_size, color=(1, 1, 1, 1))
         text_label.refresh()
         text_x = x + (width - text_label.texture.size[0]) / 2
         text_y = y + (height - text_label.texture.size[1]) / 2

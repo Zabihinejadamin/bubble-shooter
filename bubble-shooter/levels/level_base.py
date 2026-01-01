@@ -27,13 +27,15 @@ class LevelBase:
         self.level_number = 1
         self.name = "Level 1"
         
-        # Game settings
-        self.bubble_radius = 20
+        # Game settings (base resolution: 1080x2424)
+        # Scaled from original 360x640 design
+        # Scale factors: width 1080/360=3.0, height 2424/640=3.7875
+        self.bubble_radius = 60  # 20 * 3.0
         self.grid_width = 10
         self.grid_height = 12
-        self.grid_spacing = 45
-        self.grid_start_x = 100
-        self.grid_start_y = 1015  # Topmost bubble line position (fixed for all levels)
+        self.grid_spacing = 135  # 45 * 3.0
+        self.grid_start_x = 300  # 100 * 3.0
+        self.grid_start_y = 2300  # Position from bottom, scaled for 2424 height (approximately 1015 * 2.26)
         
         # Game state
         self.max_shots = 20

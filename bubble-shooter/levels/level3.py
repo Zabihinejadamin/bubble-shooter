@@ -15,12 +15,8 @@ class Level3(LevelBase):
         self.name = "Level 3"
         
         # Game settings for Level 3
-        self.bubble_radius = 20
-        self.grid_width = 10
+        # bubble_radius, grid_spacing, grid_start_x, grid_start_y are inherited from LevelBase (scaled for 1080x2424)
         self.grid_height = 15  # More rows for increased difficulty
-        # Grid spacing must be at least 2 * radius to prevent intersection
-        self.grid_spacing = max(45, self.bubble_radius * 2.2)  # 2.2 * radius ensures no overlap
-        self.grid_start_x = 100  # Same horizontal position as Level 1
         
         # Game state for Level 3
         self.max_shots = 18  # Slightly fewer shots than Level 1

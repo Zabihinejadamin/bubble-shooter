@@ -15,13 +15,10 @@ class Level1(LevelBase):
         self.name = "Level 1"
         
         # Game settings for Level 1
-        self.bubble_radius = 20
-        self.grid_width = 10
-        self.grid_height = 12
-        # Grid spacing must be at least 2 * radius to prevent intersection
-        self.grid_spacing = max(45, self.bubble_radius * 2.2)  # 2.2 * radius ensures no overlap
-        self.grid_start_x = 100  # Shifted left by 50 (was 150)
-        # grid_start_y is inherited from LevelBase (1015)
+        # All values (bubble_radius, grid_spacing, grid_start_x, grid_start_y) 
+        # are inherited from LevelBase (already scaled for 1080x2424)
+        # No need to override - use base values
+        # (grid_start_x = -600, grid_start_y = 915)
         
         # Game state for Level 1
         self.max_shots = 20  # Maximum number of bubbles to shoot
