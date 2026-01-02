@@ -16,6 +16,13 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+# Import graphics enhancer
+try:
+    from graphics_enhancer import GraphicsEnhancer
+    GRAPHICS_ENHANCER_AVAILABLE = True
+except ImportError:
+    GRAPHICS_ENHANCER_AVAILABLE = False
+
 # Element types
 FIRE = 0
 WATER = 1
@@ -170,6 +177,16 @@ class BubbleShooterGame(Widget):
         self.gold_texture = None
         self.load_gold_image()
         
+        # Enhanced graphics system
+        self.graphics_enhancer = None
+        self.bubble_textures = {}  # Cache for bubble textures
+        if GRAPHICS_ENHANCER_AVAILABLE:
+            self.graphics_enhancer = GraphicsEnhancer()
+            self.graphics_enhancer.set_scale(self.scale)
+        
+        # Particle effects for explosions
+        self.particles = []  # List of particle dictionaries
+        
         # Call on_size immediately and also after a short delay to ensure window size is set
         # This ensures scaling works even if window size is already available
         self.on_size()
@@ -238,6 +255,12 @@ class BubbleShooterGame(Widget):
             self.current_bubble.radius = self.bubble_radius
         if self.next_bubble:
             self.next_bubble.radius = self.bubble_radius
+        
+        # Update graphics enhancer scale
+        if self.graphics_enhancer:
+            self.graphics_enhancer.set_scale(self.scale)
+            # Clear texture cache to regenerate at new scale
+            self.bubble_textures.clear()
         
         # Load next bubble if needed
         if self.next_bubble is None:
@@ -547,10 +570,14 @@ class BubbleShooterGame(Widget):
                 self.draw_grid()
                 self.draw_shot_bubbles()
                 self.draw_shooter()
+                self.draw_particles()  # Draw particles on top
                 self.draw_ui()
             return
         
         # No longer need to update falling bubbles - disconnected bubbles are removed immediately
+        
+        # Update particles
+        self.update_particles(dt)
         
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
@@ -611,6 +638,7 @@ class BubbleShooterGame(Widget):
             self.draw_grid()
             self.draw_shot_bubbles()
             self.draw_shooter()
+            self.draw_particles()  # Draw particles on top
             self.draw_ui()
     
     def has_moving_bubbles(self):
@@ -766,6 +794,9 @@ class BubbleShooterGame(Widget):
             exploded_count = 0
             for match in matches:
                 if match in self.grid_bubbles:
+                    # Create particle effect for this bubble
+                    self.create_explosion_particles(match.x, match.y, match.get_color())
+                    
                     # Check for dynamite before removing
                     if match.has_dynamite:
                         has_dynamite_explosion = True
@@ -825,8 +856,13 @@ class BubbleShooterGame(Widget):
         exploded_count = 0
         for bubble in bubbles_to_explode:
             if bubble in self.grid_bubbles:
+                # Create particle effect for this bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
                 self.grid_bubbles.remove(bubble)
                 exploded_count += 1
+        
+        # Create large explosion effect at dynamite position
+        self.create_explosion_particles(x, y, (1.0, 0.5, 0.2), particle_count=30, speed_multiplier=2.0)
         
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
@@ -864,8 +900,13 @@ class BubbleShooterGame(Widget):
         exploded_count = 0
         for bubble in bubbles_to_explode:
             if bubble in self.grid_bubbles:
+                # Create particle effect for this bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
                 self.grid_bubbles.remove(bubble)
                 exploded_count += 1
+        
+        # Create large explosion effect at mine position
+        self.create_explosion_particles(x, y, (1.0, 0.8, 0.0), particle_count=25, speed_multiplier=1.8)
         
         # Trigger dynamite explosions after removing bubbles (to avoid double processing)
         for dynamite_x, dynamite_y in dynamite_to_trigger:
@@ -899,6 +940,92 @@ class BubbleShooterGame(Widget):
                 if distance < neighbor_distance and bubble.matches_element(other):
                     matches.append(other)
                     self.find_connected_matches(other, matches, visited)
+    
+    def create_explosion_particles(self, x, y, color, particle_count=15, speed_multiplier=1.0):
+        """Create particle effects for bubble explosions"""
+        if not self.graphics_enhancer or not PIL_AVAILABLE:
+            return
+        
+        base_speed = 200 * speed_multiplier * self.scale
+        
+        for _ in range(particle_count):
+            # Random angle for particle direction
+            angle = random.uniform(0, 2 * math.pi)
+            # Random speed variation
+            speed = random.uniform(base_speed * 0.5, base_speed * 1.5)
+            
+            # Random lifetime (0.3 to 0.8 seconds)
+            lifetime = random.uniform(0.3, 0.8)
+            
+            # Random size
+            size = random.uniform(3 * self.scale, 8 * self.scale)
+            
+            # Slight color variation
+            color_variation = random.uniform(0.8, 1.2)
+            particle_color = (
+                min(1.0, color[0] * color_variation),
+                min(1.0, color[1] * color_variation),
+                min(1.0, color[2] * color_variation)
+            )
+            
+            particle = {
+                'x': x,
+                'y': y,
+                'vx': math.cos(angle) * speed,
+                'vy': math.sin(angle) * speed,
+                'color': particle_color,
+                'size': size,
+                'lifetime': lifetime,
+                'age': 0.0,
+                'texture': None
+            }
+            
+            # Create texture if graphics enhancer is available
+            if self.graphics_enhancer:
+                particle['texture'] = self.graphics_enhancer.create_particle_texture(
+                    int(size * 2), particle_color, fade=True
+                )
+            
+            self.particles.append(particle)
+    
+    def update_particles(self, dt):
+        """Update particle positions and lifetimes"""
+        for particle in self.particles[:]:
+            # Update position
+            particle['x'] += particle['vx'] * dt
+            particle['y'] += particle['vy'] * dt
+            
+            # Apply gravity/friction
+            particle['vy'] -= 300 * dt * self.scale  # Gravity
+            particle['vx'] *= 0.98  # Friction
+            
+            # Update age
+            particle['age'] += dt
+            
+            # Remove expired particles
+            if particle['age'] >= particle['lifetime']:
+                self.particles.remove(particle)
+    
+    def draw_particles(self):
+        """Draw all particles"""
+        for particle in self.particles:
+            # Calculate alpha based on remaining lifetime
+            remaining_life = 1.0 - (particle['age'] / particle['lifetime'])
+            alpha = max(0.0, min(1.0, remaining_life))
+            
+            if particle['texture']:
+                # Draw using texture
+                size = particle['size'] * 2
+                Color(1, 1, 1, alpha)
+                Rectangle(texture=particle['texture'],
+                         pos=(particle['x'] - size / 2, particle['y'] - size / 2),
+                         size=(size, size))
+            else:
+                # Fallback: draw simple circle
+                color = particle['color']
+                Color(color[0], color[1], color[2], alpha)
+                Ellipse(pos=(particle['x'] - particle['size'], particle['y'] - particle['size']),
+                       size=(particle['size'] * 2, particle['size'] * 2))
     
     def check_floating_bubbles(self):
         """Check for bubbles not connected to topmost line and make them fall"""
@@ -966,6 +1093,8 @@ class BubbleShooterGame(Widget):
         disconnected_count = 0
         for bubble in disconnected_bubbles:
             if bubble in self.grid_bubbles:
+                # Create particle effect for falling bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
                 self.grid_bubbles.remove(bubble)
                 disconnected_count += 1
         
@@ -1223,42 +1352,66 @@ class BubbleShooterGame(Widget):
         radius = bubble.radius
         color = bubble.get_color()
         
-        # Real bubbles are semi-transparent, so we'll use the color but with transparency
+        # Try to use enhanced graphics texture if available
+        has_special = bubble.has_dynamite or bubble.has_mine or bubble.has_golden
+        use_enhanced = self.graphics_enhancer and PIL_AVAILABLE
         
-        # 1. Draw subtle shadow (real bubbles cast soft shadows)
-        shadow_offset = 2
-        Color(0, 0, 0, 0.15)  # Very subtle shadow
-        Ellipse(pos=(x - radius + shadow_offset, y - radius - shadow_offset),
-               size=(radius * 2, radius * 2))
+        if use_enhanced:
+            # Create cache key for this bubble type
+            cache_key = f"bubble_{bubble.element_type}_{int(radius)}_{has_special}"
+            
+            # Get or create texture
+            texture = self.bubble_textures.get(cache_key)
+            if texture is None:
+                texture = self.graphics_enhancer.create_bubble_texture(
+                    radius, color, bubble.element_type, has_special
+                )
+                if texture:
+                    self.bubble_textures[cache_key] = texture
+            
+            # Draw using texture if available
+            if texture:
+                texture_size = texture.width / 2.5  # Account for 2.5x generation scale
+                Color(1, 1, 1, 1)  # Full color
+                Rectangle(texture=texture,
+                         pos=(x - texture_size / 2, y - texture_size / 2),
+                         size=(texture_size, texture_size))
+            else:
+                use_enhanced = False  # Fall back to basic drawing
         
-        # 2. Draw main bubble body - semi-transparent with color tint
-        # Real bubbles are mostly transparent with a slight color tint
-        # For levels 6-9, bubbles are opaque (not transparent)
-        if self.level >= 6:
-            bubble_alpha = 1.0  # Opaque for levels 6-9
-        else:
-            bubble_alpha = 0.3  # Transparency (lower = more transparent)
-        Color(color[0], color[1], color[2], bubble_alpha)
-        Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius * 2))
-        
-        # 3. Draw thin colored rim/edge (like real bubbles have)
-        # Real bubbles have a thin colored edge
-        rim_width = 1.5
-        if self.level >= 6:
-            rim_alpha = 1.0  # Fully opaque for levels 6-9
-        else:
-            rim_alpha = 0.6  # More opaque on edges
-        Color(color[0], color[1], color[2], rim_alpha)
-        Line(circle=(x, y, radius), width=rim_width)
-        
-        # 4. Draw subtle color rim (prismatic effect on edges)
-        # Real bubbles can have color fringing
-        if self.level >= 6:
-            fringe_alpha = 0.8  # More opaque for levels 6-9
-        else:
-            fringe_alpha = 0.4
-        Color(color[0] * 0.8, color[1] * 0.8, color[2] * 0.8, fringe_alpha)
-        Line(circle=(x, y, radius - 0.5), width=3 * self.scale)  # 1 * 3
+        # Fallback to basic drawing if enhanced graphics not available
+        if not use_enhanced:
+            # Draw ball-like appearance with basic primitives
+            
+            # 1. Draw shadow (ball casts stronger shadow)
+            shadow_offset = 3 * self.scale
+            Color(0, 0, 0, 0.25)  # Stronger shadow for ball
+            Ellipse(pos=(x - radius + shadow_offset, y - radius - shadow_offset),
+                   size=(radius * 2, radius * 2))
+            
+            # 2. Draw main ball body - fully opaque solid ball
+            Color(color[0], color[1], color[2], 1.0)  # Fully opaque
+            Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius * 2))
+            
+            # 3. Draw darker bottom (simulate sphere shading)
+            # Bottom half darker for depth
+            bottom_darkness = 0.7
+            Color(color[0] * bottom_darkness, color[1] * bottom_darkness, color[2] * bottom_darkness, 1.0)
+            # Draw darker bottom half
+            Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius))
+            
+            # 4. Draw highlight (bright spot at top-left for ball shine)
+            highlight_radius = radius * 0.4
+            highlight_x = x - radius * 0.3
+            highlight_y = y + radius * 0.3
+            Color(1, 1, 1, 0.5)  # White highlight
+            Ellipse(pos=(highlight_x - highlight_radius, highlight_y - highlight_radius),
+                   size=(highlight_radius * 2, highlight_radius * 2))
+            
+            # 5. Draw rim/edge (bright edge on lit side)
+            rim_width = 2 * self.scale
+            Color(color[0] * 1.3, color[1] * 1.3, color[2] * 1.3, 1.0)  # Brighter rim
+            Line(circle=(x, y, radius), width=rim_width)
         
         # 5. Draw dynamite indicator if bubble has dynamite
         if bubble.has_dynamite:
