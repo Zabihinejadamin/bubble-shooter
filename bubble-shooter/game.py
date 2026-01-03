@@ -1539,8 +1539,8 @@ class BubbleShooterGame(Widget):
         x, y = self.shooter_x, self.shooter_y
         # Scale bazooka size based on bubble radius (make it bigger)
         bubble_radius = self.bubble_radius
-        shooter_length = bubble_radius * 3.0  # 3x bubble radius for length
-        barrel_width = bubble_radius * 0.9  # Bigger barrel width (increased from 0.5)
+        shooter_length = bubble_radius * 6.0  # 6x bubble radius for length (x2 of original 3.0)
+        barrel_width = bubble_radius * 0.9 * 1.5  # Barrel width x1.5
         base_radius = bubble_radius * 0.85  # Base radius proportional to bubble
         tip_radius = bubble_radius * 0.3  # Tip radius proportional to bubble
         
@@ -1582,34 +1582,38 @@ class BubbleShooterGame(Widget):
         Color(0.5, 0.5, 0.55, 0.8)
         Line(circle=(x, y, base_radius), width=3 * self.scale)
         
-        # Draw bazooka barrel (cylindrical, metallic)
+        # Draw bazooka barrel (cylindrical, metallic with detailed segments)
         # Barrel shadow
-        barrel_points = [
-            x + perp_x * half_width, y + perp_y * half_width,
-            end_x + perp_x * half_width, end_y + perp_y * half_width,
-            end_x - perp_x * half_width, end_y - perp_y * half_width,
-            x - perp_x * half_width, y - perp_y * half_width
-        ]
-        Color(0, 0, 0, 0.2)
-        # Draw shadow offset
-        shadow_offset = 2
-        shadow_points = [
-            barrel_points[0] + shadow_offset, barrel_points[1] - shadow_offset,
-            barrel_points[2] + shadow_offset, barrel_points[3] - shadow_offset,
-            barrel_points[4] + shadow_offset, barrel_points[5] - shadow_offset,
-            barrel_points[6] + shadow_offset, barrel_points[7] - shadow_offset
-        ]
-        # Simplified shadow drawing
-        Line(points=[barrel_points[0], barrel_points[1], barrel_points[2], barrel_points[3]], width=barrel_width)
+        Color(0, 0, 0, 0.25)
+        shadow_offset = 3
+        Line(points=[x + shadow_offset, y - shadow_offset, end_x + shadow_offset, end_y - shadow_offset], width=barrel_width)
         
         # Main barrel body (metallic gray with gradient effect)
-        Color(0.4, 0.4, 0.45, 1)  # Metallic gray
+        Color(0.35, 0.35, 0.4, 1)  # Darker metallic gray
         Line(points=[x, y, end_x, end_y], width=barrel_width)
         
-        # Barrel top highlight (brighter on top)
-        Color(0.55, 0.55, 0.6, 0.8)
-        top_line_width = barrel_width * 0.4
-        top_offset = half_width * 0.6
+        # Barrel segments/rings for detail (draw multiple rings along barrel)
+        num_segments = 4
+        for i in range(1, num_segments):
+            segment_t = i / num_segments
+            seg_x = x + (end_x - x) * segment_t
+            seg_y = y + (end_y - y) * segment_t
+            
+            # Segment ring (darker line)
+            Color(0.25, 0.25, 0.3, 0.9)
+            Line(points=[seg_x + perp_x * half_width, seg_y + perp_y * half_width,
+                         seg_x - perp_x * half_width, seg_y - perp_y * half_width], width=2 * self.scale)
+            
+            # Segment highlight (brighter on top)
+            Color(0.5, 0.5, 0.55, 0.7)
+            highlight_offset = half_width * 0.7
+            Line(points=[seg_x + perp_x * highlight_offset, seg_y + perp_y * highlight_offset,
+                         seg_x - perp_x * highlight_offset, seg_y - perp_y * highlight_offset], width=1.5 * self.scale)
+        
+        # Barrel top highlight (brighter on top - main highlight)
+        Color(0.6, 0.6, 0.65, 0.9)
+        top_line_width = barrel_width * 0.35
+        top_offset = half_width * 0.65
         top_start_x = x + perp_x * top_offset
         top_start_y = y + perp_y * top_offset
         top_end_x = end_x + perp_x * top_offset
@@ -1617,7 +1621,7 @@ class BubbleShooterGame(Widget):
         Line(points=[top_start_x, top_start_y, top_end_x, top_end_y], width=top_line_width)
         
         # Barrel bottom shadow (darker on bottom)
-        Color(0.25, 0.25, 0.3, 0.8)
+        Color(0.2, 0.2, 0.25, 0.9)
         bottom_offset = -top_offset
         bottom_start_x = x + perp_x * bottom_offset
         bottom_start_y = y + perp_y * bottom_offset
@@ -1625,34 +1629,63 @@ class BubbleShooterGame(Widget):
         bottom_end_y = end_y + perp_y * bottom_offset
         Line(points=[bottom_start_x, bottom_start_y, bottom_end_x, bottom_end_y], width=top_line_width)
         
-        # Barrel rim/edge lines
-        Color(0.3, 0.3, 0.35, 0.9)
+        # Barrel rim/edge lines (top and bottom edges)
+        Color(0.45, 0.45, 0.5, 1.0)  # Brighter edge
         Line(points=[x + perp_x * half_width, y + perp_y * half_width, 
-                     end_x + perp_x * half_width, end_y + perp_y * half_width], width=2 * self.scale)
+                     end_x + perp_x * half_width, end_y + perp_y * half_width], width=2.5 * self.scale)
+        Color(0.2, 0.2, 0.25, 1.0)  # Darker bottom edge
         Line(points=[x - perp_x * half_width, y - perp_y * half_width, 
-                     end_x - perp_x * half_width, end_y - perp_y * half_width], width=2 * self.scale)
+                     end_x - perp_x * half_width, end_y - perp_y * half_width], width=2.5 * self.scale)
+        
+        # Barrel side highlights (for 3D cylindrical effect)
+        Color(0.5, 0.5, 0.55, 0.6)
+        side_offset = half_width * 0.8
+        Line(points=[x + perp_x * side_offset, y + perp_y * side_offset,
+                     end_x + perp_x * side_offset, end_y + perp_y * side_offset], width=1.5 * self.scale)
+        Color(0.25, 0.25, 0.3, 0.6)
+        Line(points=[x - perp_x * side_offset, y - perp_y * side_offset,
+                     end_x - perp_x * side_offset, end_y - perp_y * side_offset], width=1.5 * self.scale)
         
         # Draw bazooka tip/muzzle (larger, more detailed)
         # Tip shadow
-        Color(0, 0, 0, 0.3)
-        Ellipse(pos=(end_x - tip_radius + 1, end_y - tip_radius - 1), size=(tip_radius * 2, tip_radius * 2))
+        Color(0, 0, 0, 0.4)
+        Ellipse(pos=(end_x - tip_radius + 2, end_y - tip_radius - 2), size=(tip_radius * 2, tip_radius * 2))
         
         # Main tip (dark metallic)
         Color(0.2, 0.2, 0.25, 1)  # Darker metallic
         Ellipse(pos=(end_x - tip_radius, end_y - tip_radius), size=(tip_radius * 2, tip_radius * 2))
         
-        # Tip rim (metallic edge)
-        Color(0.5, 0.5, 0.55, 0.9)
-        Line(circle=(end_x, end_y, tip_radius), width=2 * self.scale)
+        # Tip rim (metallic edge with highlight)
+        Color(0.5, 0.5, 0.55, 1.0)
+        Line(circle=(end_x, end_y, tip_radius), width=3 * self.scale)
         
-        # Muzzle opening (dark center)
-        muzzle_radius = tip_radius * 0.6
-        Color(0.1, 0.1, 0.15, 1)  # Very dark
+        # Tip top highlight (for 3D effect)
+        highlight_angle = angle_rad - math.pi / 2  # Top of tip
+        highlight_x = end_x + math.cos(highlight_angle) * tip_radius * 0.7
+        highlight_y = end_y + math.sin(highlight_angle) * tip_radius * 0.7
+        Color(0.6, 0.6, 0.65, 0.8)
+        highlight_size = tip_radius * 0.4
+        Ellipse(pos=(highlight_x - highlight_size, highlight_y - highlight_size), 
+               size=(highlight_size * 2, highlight_size * 2))
+        
+        # Muzzle opening (dark center with rim)
+        muzzle_radius = tip_radius * 0.55
+        Color(0.05, 0.05, 0.1, 1)  # Very dark
         Ellipse(pos=(end_x - muzzle_radius, end_y - muzzle_radius), size=(muzzle_radius * 2, muzzle_radius * 2))
         
+        # Muzzle rim (inner edge)
+        Color(0.3, 0.3, 0.35, 0.9)
+        Line(circle=(end_x, end_y, muzzle_radius), width=1.5 * self.scale)
+        
+        # Muzzle depth effect (darker inner ring)
+        inner_muzzle_radius = muzzle_radius * 0.7
+        Color(0.0, 0.0, 0.05, 1)  # Almost black
+        Ellipse(pos=(end_x - inner_muzzle_radius, end_y - inner_muzzle_radius), 
+               size=(inner_muzzle_radius * 2, inner_muzzle_radius * 2))
+        
         # Draw grip/handle (on the side of bazooka)
-        grip_length = 40 * self.scale
-        grip_width = 12 * self.scale
+        grip_length = bubble_radius * 0.7  # Proportional to bubble
+        grip_width = bubble_radius * 0.2  # Proportional to bubble
         grip_angle = angle_rad + math.pi / 2  # Perpendicular to barrel
         grip_x = x + math.cos(grip_angle) * (base_radius * 0.7)
         grip_y = y + math.sin(grip_angle) * (base_radius * 0.7)
@@ -1660,16 +1693,93 @@ class BubbleShooterGame(Widget):
         grip_end_y = grip_y + math.sin(angle_rad) * grip_length
         
         # Grip shadow
-        Color(0, 0, 0, 0.2)
-        Line(points=[grip_x + 1, grip_y - 1, grip_end_x + 1, grip_end_y - 1], width=grip_width)
+        Color(0, 0, 0, 0.3)
+        Line(points=[grip_x + 2, grip_y - 2, grip_end_x + 2, grip_end_y - 2], width=grip_width)
         
-        # Main grip
-        Color(0.3, 0.25, 0.2, 1)  # Brown/dark wood color
+        # Main grip body
+        Color(0.25, 0.2, 0.15, 1)  # Dark brown/dark wood color
         Line(points=[grip_x, grip_y, grip_end_x, grip_end_y], width=grip_width)
         
-        # Grip highlight
-        Color(0.4, 0.35, 0.3, 0.6)
-        Line(points=[grip_x, grip_y, grip_end_x, grip_end_y], width=grip_width * 0.5)
+        # Grip texture lines (wood grain effect)
+        num_grain_lines = 3
+        for i in range(1, num_grain_lines):
+            grain_t = i / num_grain_lines
+            grain_x = grip_x + (grip_end_x - grip_x) * grain_t
+            grain_y = grip_y + (grip_end_y - grip_y) * grain_t
+            Color(0.2, 0.15, 0.1, 0.8)  # Darker grain
+            Line(points=[grip_x, grip_y, grain_x, grain_y], width=1 * self.scale)
+        
+        # Grip highlight (top edge)
+        Color(0.4, 0.35, 0.3, 0.7)
+        Line(points=[grip_x, grip_y, grip_end_x, grip_end_y], width=grip_width * 0.4)
+        
+        # Grip bottom shadow
+        Color(0.15, 0.12, 0.1, 0.8)
+        Line(points=[grip_x, grip_y, grip_end_x, grip_end_y], width=grip_width * 0.3)
+        
+        # Draw trigger guard (semi-circle around grip)
+        trigger_guard_radius = grip_width * 1.2
+        trigger_guard_x = grip_end_x
+        trigger_guard_y = grip_end_y
+        Color(0.3, 0.3, 0.35, 1)  # Metallic gray
+        # Draw trigger guard as arc (simplified as line segments)
+        guard_points = []
+        for i in range(5):
+            guard_angle = angle_rad - math.pi / 2 + (i / 4) * math.pi
+            px = trigger_guard_x + math.cos(guard_angle) * trigger_guard_radius
+            py = trigger_guard_y + math.sin(guard_angle) * trigger_guard_radius
+            guard_points.extend([px, py])
+        Line(points=guard_points, width=2 * self.scale)
+        
+        # Draw trigger (small rectangle)
+        trigger_width = grip_width * 0.6
+        trigger_height = grip_width * 0.8
+        trigger_x = grip_end_x - math.cos(angle_rad) * trigger_height
+        trigger_y = grip_end_y - math.sin(angle_rad) * trigger_height
+        Color(0.2, 0.2, 0.25, 1)  # Dark metallic
+        # Draw trigger as small rectangle (simplified)
+        trigger_points = [
+            trigger_x - perp_x * trigger_width, trigger_y - perp_y * trigger_width,
+            trigger_x + perp_x * trigger_width, trigger_y + perp_y * trigger_width,
+            trigger_x + perp_x * trigger_width + math.cos(angle_rad) * trigger_height,
+            trigger_y + perp_y * trigger_width + math.sin(angle_rad) * trigger_height,
+            trigger_x - perp_x * trigger_width + math.cos(angle_rad) * trigger_height,
+            trigger_y - perp_y * trigger_width + math.sin(angle_rad) * trigger_height
+        ]
+        Line(points=trigger_points, width=2 * self.scale, close=True)
+        
+        # Draw sights (front and rear)
+        sight_size = bubble_radius * 0.15
+        # Rear sight (near base)
+        rear_sight_x = x + math.cos(angle_rad) * (base_radius * 0.5)
+        rear_sight_y = y + math.sin(angle_rad) * (base_radius * 0.5)
+        Color(0.4, 0.4, 0.45, 1)  # Metallic
+        # Rear sight as small rectangle
+        sight_offset = perp_x * sight_size
+        Line(points=[rear_sight_x + sight_offset, rear_sight_y + perp_y * sight_size,
+                     rear_sight_x - sight_offset, rear_sight_y - perp_y * sight_size], width=2 * self.scale)
+        
+        # Front sight (near tip)
+        front_sight_x = end_x - math.cos(angle_rad) * (tip_radius * 0.5)
+        front_sight_y = end_y - math.sin(angle_rad) * (tip_radius * 0.5)
+        Color(0.5, 0.5, 0.55, 1)  # Brighter metallic
+        # Front sight as small post
+        Line(points=[front_sight_x + perp_x * sight_size * 0.5, front_sight_y + perp_y * sight_size * 0.5,
+                     front_sight_x - perp_x * sight_size * 0.5, front_sight_y - perp_y * sight_size * 0.5], 
+             width=2.5 * self.scale)
+        
+        # Draw barrel reinforcement bands (near base and middle)
+        band_width = 3 * self.scale
+        for band_pos in [0.2, 0.6]:  # 20% and 60% along barrel
+            band_x = x + (end_x - x) * band_pos
+            band_y = y + (end_y - y) * band_pos
+            Color(0.25, 0.25, 0.3, 1)  # Dark metallic band
+            Line(points=[band_x + perp_x * half_width, band_y + perp_y * half_width,
+                         band_x - perp_x * half_width, band_y - perp_y * half_width], width=band_width)
+            # Band highlight
+            Color(0.45, 0.45, 0.5, 0.6)
+            Line(points=[band_x + perp_x * half_width * 0.8, band_y + perp_y * half_width * 0.8,
+                         band_x - perp_x * half_width * 0.8, band_y - perp_y * half_width * 0.8], width=1 * self.scale)
         
         # Draw current bubble with 3D effect (positioned at back of bazooka)
         if self.current_bubble and not self.current_bubble.attached:
