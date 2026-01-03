@@ -7,6 +7,7 @@ from kivy.graphics import Color, Ellipse, Line, Rectangle, PushMatrix, PopMatrix
 from kivy.core.text import Label as CoreLabel
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.core.audio import SoundLoader
 import random
 import math
 import os
@@ -229,6 +230,16 @@ class BubbleShooterGame(Widget):
         self.jet_texture = None
         self.load_jet_image()
         
+        # Background music
+        self.background_music = None
+        self.load_background_music()
+        
+        # Sound effects for bubble explosions
+        self.sound_one_bubble = None
+        self.sound_two_bubbles = None
+        self.sound_four_bubbles = None
+        self.load_explosion_sounds()
+        
         # Enhanced graphics system
         self.graphics_enhancer = None
         self.bubble_textures = {}  # Cache for bubble textures
@@ -374,6 +385,15 @@ class BubbleShooterGame(Widget):
                     # Check top boundary (y + radius > height)
                     if y + self.bubble_radius > self.height:
                         continue
+                
+                # Check minimum distance from shooter (at least 400 pixels scaled)
+                if self.shooter_x is not None and self.shooter_y is not None:
+                    dx = x - self.shooter_x
+                    dy = y - self.shooter_y
+                    distance_to_shooter = math.sqrt(dx * dx + dy * dy)
+                    min_distance_from_shooter = 400 * self.scale  # 400 pixels minimum margin
+                    if distance_to_shooter < min_distance_from_shooter:
+                        continue  # Skip this bubble if too close to shooter
                 
                 element = random.randint(0, 3)
                 bubble = Bubble(x, y, element, self.bubble_radius)
@@ -860,11 +880,22 @@ class BubbleShooterGame(Widget):
             
             # Check if this position intersects with any existing bubbles
             if not self.check_bubble_intersections(test_bubble, exclude_bubble=bubble):
-                # Check distance from original collision point
-                dist = math.sqrt((test_x - bubble.x)**2 + (test_y - bubble.y)**2)
-                if dist < min_distance:
-                    min_distance = dist
-                    best_pos = (test_x, test_y)
+                # Check minimum distance from shooter (at least 400 pixels scaled)
+                too_close_to_shooter = False
+                if self.shooter_x is not None and self.shooter_y is not None:
+                    dx = test_x - self.shooter_x
+                    dy = test_y - self.shooter_y
+                    distance_to_shooter = math.sqrt(dx * dx + dy * dy)
+                    min_distance_from_shooter = 400 * self.scale  # 400 pixels minimum margin
+                    if distance_to_shooter < min_distance_from_shooter:
+                        too_close_to_shooter = True
+                
+                if not too_close_to_shooter:
+                    # Check distance from original collision point
+                    dist = math.sqrt((test_x - bubble.x)**2 + (test_y - bubble.y)**2)
+                    if dist < min_distance:
+                        min_distance = dist
+                        best_pos = (test_x, test_y)
         
         # If no good adjacent position found, try snapping to exact grid
         if best_pos is None:
@@ -878,7 +909,18 @@ class BubbleShooterGame(Widget):
             
             test_bubble = Bubble(x, y, bubble.element_type, bubble.radius)
             if not self.check_bubble_intersections(test_bubble, exclude_bubble=bubble):
-                best_pos = (x, y)
+                # Check minimum distance from shooter (at least 400 pixels scaled)
+                too_close_to_shooter = False
+                if self.shooter_x is not None and self.shooter_y is not None:
+                    dx = x - self.shooter_x
+                    dy = y - self.shooter_y
+                    distance_to_shooter = math.sqrt(dx * dx + dy * dy)
+                    min_distance_from_shooter = 400 * self.scale  # 400 pixels minimum margin
+                    if distance_to_shooter < min_distance_from_shooter:
+                        too_close_to_shooter = True
+                
+                if not too_close_to_shooter:
+                    best_pos = (x, y)
         
         # If still no valid position, use reference position (shouldn't happen with proper spacing)
         if best_pos is None:
@@ -897,9 +939,20 @@ class BubbleShooterGame(Widget):
                 test_x = reference_bubble.x + math.cos(angle_rad) * dist
                 test_y = reference_bubble.y + math.sin(angle_rad) * dist
                 
-                test_bubble = Bubble(test_x, test_y, bubble.element_type, bubble.radius)
-                if not self.check_bubble_intersections(test_bubble, exclude_bubble=bubble):
-                    return (test_x, test_y)
+                # Check minimum distance from shooter (at least 400 pixels scaled)
+                too_close_to_shooter = False
+                if self.shooter_x is not None and self.shooter_y is not None:
+                    dx = test_x - self.shooter_x
+                    dy = test_y - self.shooter_y
+                    distance_to_shooter = math.sqrt(dx * dx + dy * dy)
+                    min_distance_from_shooter = 400 * self.scale  # 400 pixels minimum margin
+                    if distance_to_shooter < min_distance_from_shooter:
+                        too_close_to_shooter = True
+                
+                if not too_close_to_shooter:
+                    test_bubble = Bubble(test_x, test_y, bubble.element_type, bubble.radius)
+                    if not self.check_bubble_intersections(test_bubble, exclude_bubble=bubble):
+                        return (test_x, test_y)
         
         # Fallback: position above reference
         return (reference_bubble.x, reference_bubble.y + self.grid_spacing)
@@ -953,6 +1006,8 @@ class BubbleShooterGame(Widget):
             # Calculate score: exploded bubbles * remaining shooting bubbles
             if exploded_count > 0:
                 self.score += exploded_count * self.shots_remaining
+                # Play explosion sound effect
+                self.play_explosion_sound(exploded_count)
             
             # Trigger dynamite explosions if any dynamite was found
             if has_dynamite_explosion:
@@ -1010,6 +1065,8 @@ class BubbleShooterGame(Widget):
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
             self.score += exploded_count * self.shots_remaining
+            # Play explosion sound effect
+            self.play_explosion_sound(exploded_count)
         
         # Check for floating bubbles after explosion
         self.check_floating_bubbles()
@@ -1050,6 +1107,8 @@ class BubbleShooterGame(Widget):
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
             self.score += exploded_count * self.shots_remaining
+            # Play explosion sound effect
+            self.play_explosion_sound(exploded_count)
         
         # Check for floating bubbles after explosion
         self.check_floating_bubbles()
@@ -1098,6 +1157,8 @@ class BubbleShooterGame(Widget):
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
             self.score += exploded_count * self.shots_remaining
+            # Play explosion sound effect
+            self.play_explosion_sound(exploded_count)
         
         # Check for floating bubbles after mine explosion
         self.check_floating_bubbles()
@@ -1284,6 +1345,8 @@ class BubbleShooterGame(Widget):
         # Calculate score: all disconnected bubbles * remaining shooting bubbles
         if disconnected_count > 0:
             self.score += disconnected_count * self.shots_remaining
+            # Play explosion sound effect
+            self.play_explosion_sound(disconnected_count)
             # Print remaining bubbles after removing disconnected ones
             remaining_count = len(self.grid_bubbles)
             print(f"Remaining bubbles: {remaining_count}")
@@ -1446,6 +1509,90 @@ class BubbleShooterGame(Widget):
         else:
             print(f"Jet image not found: {jet_path}")
             self.jet_texture = None
+    
+    def load_background_music(self):
+        """Load and play background music"""
+        # Use the specified background music file
+        music_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\kids-game-gaming-background-music-297733.mp3"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(music_path):
+            music_path = self.get_asset_path("kids-game-gaming-background-music-297733.mp3")
+        
+        if music_path and os.path.exists(music_path):
+            try:
+                self.background_music = SoundLoader.load(music_path)
+                if self.background_music:
+                    self.background_music.loop = True  # Loop the music
+                    self.background_music.play()  # Start playing
+                    print(f"Background music loaded and playing: {music_path}")
+                else:
+                    print(f"Failed to load background music: {music_path}")
+            except Exception as e:
+                print(f"Error loading background music: {e}")
+                self.background_music = None
+        else:
+            print(f"Background music file not found: kids-game-gaming-background-music-297733.mp3")
+            self.background_music = None
+    
+    def load_explosion_sounds(self):
+        """Load sound effects for bubble explosions"""
+        # Load one_bubble.mp3 (for 1-3 bubbles)
+        one_bubble_path = self.get_asset_path("one_bubble.mp3")
+        if one_bubble_path and os.path.exists(one_bubble_path):
+            try:
+                self.sound_one_bubble = SoundLoader.load(one_bubble_path)
+                if not self.sound_one_bubble:
+                    print(f"Failed to load one_bubble.mp3")
+            except Exception as e:
+                print(f"Error loading one_bubble.mp3: {e}")
+        else:
+            print(f"Sound file not found: one_bubble.mp3")
+        
+        # Load two_bubbles.mp3 (for 4-6 bubbles)
+        two_bubbles_path = self.get_asset_path("two_bubbles.mp3")
+        if two_bubbles_path and os.path.exists(two_bubbles_path):
+            try:
+                self.sound_two_bubbles = SoundLoader.load(two_bubbles_path)
+                if not self.sound_two_bubbles:
+                    print(f"Failed to load two_bubbles.mp3")
+            except Exception as e:
+                print(f"Error loading two_bubbles.mp3: {e}")
+        else:
+            print(f"Sound file not found: two_bubbles.mp3")
+        
+        # Load four_bubbles.mp3 (for 7+ bubbles)
+        four_bubbles_path = self.get_asset_path("four_bubbles.mp3")
+        if four_bubbles_path and os.path.exists(four_bubbles_path):
+            try:
+                self.sound_four_bubbles = SoundLoader.load(four_bubbles_path)
+                if not self.sound_four_bubbles:
+                    print(f"Failed to load four_bubbles.mp3")
+            except Exception as e:
+                print(f"Error loading four_bubbles.mp3: {e}")
+        else:
+            print(f"Sound file not found: four_bubbles.mp3")
+    
+    def play_explosion_sound(self, count):
+        """Play appropriate explosion sound based on bubble count"""
+        if count <= 0:
+            return
+        
+        try:
+            if count <= 3:
+                # 1-3 bubbles: use one_bubble.mp3
+                if self.sound_one_bubble:
+                    self.sound_one_bubble.play()
+            elif count <= 6:
+                # 4-6 bubbles: use two_bubbles.mp3
+                if self.sound_two_bubbles:
+                    self.sound_two_bubbles.play()
+            else:
+                # 7+ bubbles: use four_bubbles.mp3
+                if self.sound_four_bubbles:
+                    self.sound_four_bubbles.play()
+        except Exception as e:
+            print(f"Error playing explosion sound: {e}")
     
     def load_gold_image(self):
         """Load gold bubble image texture with background removed"""
