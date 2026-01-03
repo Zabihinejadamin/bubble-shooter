@@ -373,11 +373,12 @@ class BubbleShooterGame(Widget):
                 # Update aim angle
                 self.aim_angle = math.degrees(math.atan2(dy, dx))
                 
-                # Set bubble position at shooter tip before shooting
+                # Set bubble position at back of bazooka before shooting
                 angle_rad = math.radians(self.aim_angle)
-                shooter_length = self.base_shooter_length * self.scale
-                self.current_bubble.x = self.shooter_x + math.cos(angle_rad) * shooter_length
-                self.current_bubble.y = self.shooter_y + math.sin(angle_rad) * shooter_length
+                base_radius = self.bubble_radius * 0.85  # Match the base radius used in drawing
+                bubble_offset = base_radius * 0.8  # Position bubble slightly forward from base center
+                self.current_bubble.x = self.shooter_x + math.cos(angle_rad) * bubble_offset
+                self.current_bubble.y = self.shooter_y + math.sin(angle_rad) * bubble_offset
                 
                 # Normalize direction and set velocity (scaled)
                 speed = self.base_bubble_speed * self.scale
@@ -1534,45 +1535,223 @@ class BubbleShooterGame(Widget):
                 Line(points=star_points, width=6 * self.scale, close=True)  # 2 * 3
     
     def draw_shooter(self):
-        """Draw shooter and current bubble with 3D effects"""
+        """Draw bazooka-style shooter with laser aim"""
         x, y = self.shooter_x, self.shooter_y
-        shooter_length = self.base_shooter_length * self.scale
-        shooter_width = 24 * self.scale  # 8 * 3
-        base_radius = 45 * self.scale  # 15 * 3
-        tip_radius = 15 * self.scale  # 5 * 3
+        # Scale bazooka size based on bubble radius (make it bigger)
+        bubble_radius = self.bubble_radius
+        shooter_length = bubble_radius * 3.0  # 3x bubble radius for length
+        barrel_width = bubble_radius * 0.9  # Bigger barrel width (increased from 0.5)
+        base_radius = bubble_radius * 0.85  # Base radius proportional to bubble
+        tip_radius = bubble_radius * 0.3  # Tip radius proportional to bubble
         
         # Convert angle to radians
         angle_rad = math.radians(self.aim_angle)
         
-        # Calculate shooter end point
+        # Calculate shooter end point (tip of bazooka)
         end_x = x + math.cos(angle_rad) * shooter_length
         end_y = y + math.sin(angle_rad) * shooter_length
         
-        # Draw shooter base/cannon (circular base)
-        Color(0.3, 0.3, 0.3)  # Dark gray
+        # Calculate bubble position at the back of bazooka (near base, slightly forward)
+        bubble_offset = base_radius * 0.8  # Position bubble slightly forward from base center
+        bubble_x = x + math.cos(angle_rad) * bubble_offset
+        bubble_y = y + math.sin(angle_rad) * bubble_offset
+        
+        # Calculate perpendicular vector for barrel width
+        perp_x = -math.sin(angle_rad)
+        perp_y = math.cos(angle_rad)
+        half_width = barrel_width / 2
+        
+        # Draw bazooka base (larger, more detailed)
+        # Base shadow
+        Color(0, 0, 0, 0.3)
+        Ellipse(pos=(x - base_radius + 2, y - base_radius - 2), size=(base_radius * 2, base_radius * 2))
+        
+        # Main base (dark metallic)
+        Color(0.25, 0.25, 0.3, 1)  # Dark metallic gray
         Ellipse(pos=(x - base_radius, y - base_radius), size=(base_radius * 2, base_radius * 2))
         
-        # Draw shooter barrel (rotating)
-        # Use PushMatrix/PopMatrix for rotation (simulated with line)
-        Color(0.5, 0.5, 0.5)  # Medium gray
-        Line(points=[x, y, end_x, end_y], width=shooter_width)
+        # Base highlight (top-left)
+        Color(0.4, 0.4, 0.45, 0.6)
+        highlight_radius = base_radius * 0.6
+        highlight_x = x - base_radius * 0.3
+        highlight_y = y + base_radius * 0.3
+        Ellipse(pos=(highlight_x - highlight_radius, highlight_y - highlight_radius), 
+               size=(highlight_radius * 2, highlight_radius * 2))
         
-        # Draw shooter tip (small circle at end)
-        Color(0.4, 0.4, 0.4)  # Slightly darker gray
+        # Base rim (metallic edge)
+        Color(0.5, 0.5, 0.55, 0.8)
+        Line(circle=(x, y, base_radius), width=3 * self.scale)
+        
+        # Draw bazooka barrel (cylindrical, metallic)
+        # Barrel shadow
+        barrel_points = [
+            x + perp_x * half_width, y + perp_y * half_width,
+            end_x + perp_x * half_width, end_y + perp_y * half_width,
+            end_x - perp_x * half_width, end_y - perp_y * half_width,
+            x - perp_x * half_width, y - perp_y * half_width
+        ]
+        Color(0, 0, 0, 0.2)
+        # Draw shadow offset
+        shadow_offset = 2
+        shadow_points = [
+            barrel_points[0] + shadow_offset, barrel_points[1] - shadow_offset,
+            barrel_points[2] + shadow_offset, barrel_points[3] - shadow_offset,
+            barrel_points[4] + shadow_offset, barrel_points[5] - shadow_offset,
+            barrel_points[6] + shadow_offset, barrel_points[7] - shadow_offset
+        ]
+        # Simplified shadow drawing
+        Line(points=[barrel_points[0], barrel_points[1], barrel_points[2], barrel_points[3]], width=barrel_width)
+        
+        # Main barrel body (metallic gray with gradient effect)
+        Color(0.4, 0.4, 0.45, 1)  # Metallic gray
+        Line(points=[x, y, end_x, end_y], width=barrel_width)
+        
+        # Barrel top highlight (brighter on top)
+        Color(0.55, 0.55, 0.6, 0.8)
+        top_line_width = barrel_width * 0.4
+        top_offset = half_width * 0.6
+        top_start_x = x + perp_x * top_offset
+        top_start_y = y + perp_y * top_offset
+        top_end_x = end_x + perp_x * top_offset
+        top_end_y = end_y + perp_y * top_offset
+        Line(points=[top_start_x, top_start_y, top_end_x, top_end_y], width=top_line_width)
+        
+        # Barrel bottom shadow (darker on bottom)
+        Color(0.25, 0.25, 0.3, 0.8)
+        bottom_offset = -top_offset
+        bottom_start_x = x + perp_x * bottom_offset
+        bottom_start_y = y + perp_y * bottom_offset
+        bottom_end_x = end_x + perp_x * bottom_offset
+        bottom_end_y = end_y + perp_y * bottom_offset
+        Line(points=[bottom_start_x, bottom_start_y, bottom_end_x, bottom_end_y], width=top_line_width)
+        
+        # Barrel rim/edge lines
+        Color(0.3, 0.3, 0.35, 0.9)
+        Line(points=[x + perp_x * half_width, y + perp_y * half_width, 
+                     end_x + perp_x * half_width, end_y + perp_y * half_width], width=2 * self.scale)
+        Line(points=[x - perp_x * half_width, y - perp_y * half_width, 
+                     end_x - perp_x * half_width, end_y - perp_y * half_width], width=2 * self.scale)
+        
+        # Draw bazooka tip/muzzle (larger, more detailed)
+        # Tip shadow
+        Color(0, 0, 0, 0.3)
+        Ellipse(pos=(end_x - tip_radius + 1, end_y - tip_radius - 1), size=(tip_radius * 2, tip_radius * 2))
+        
+        # Main tip (dark metallic)
+        Color(0.2, 0.2, 0.25, 1)  # Darker metallic
         Ellipse(pos=(end_x - tip_radius, end_y - tip_radius), size=(tip_radius * 2, tip_radius * 2))
         
-        # Draw current bubble with 3D effect (positioned at shooter tip)
+        # Tip rim (metallic edge)
+        Color(0.5, 0.5, 0.55, 0.9)
+        Line(circle=(end_x, end_y, tip_radius), width=2 * self.scale)
+        
+        # Muzzle opening (dark center)
+        muzzle_radius = tip_radius * 0.6
+        Color(0.1, 0.1, 0.15, 1)  # Very dark
+        Ellipse(pos=(end_x - muzzle_radius, end_y - muzzle_radius), size=(muzzle_radius * 2, muzzle_radius * 2))
+        
+        # Draw grip/handle (on the side of bazooka)
+        grip_length = 40 * self.scale
+        grip_width = 12 * self.scale
+        grip_angle = angle_rad + math.pi / 2  # Perpendicular to barrel
+        grip_x = x + math.cos(grip_angle) * (base_radius * 0.7)
+        grip_y = y + math.sin(grip_angle) * (base_radius * 0.7)
+        grip_end_x = grip_x + math.cos(angle_rad) * grip_length
+        grip_end_y = grip_y + math.sin(angle_rad) * grip_length
+        
+        # Grip shadow
+        Color(0, 0, 0, 0.2)
+        Line(points=[grip_x + 1, grip_y - 1, grip_end_x + 1, grip_end_y - 1], width=grip_width)
+        
+        # Main grip
+        Color(0.3, 0.25, 0.2, 1)  # Brown/dark wood color
+        Line(points=[grip_x, grip_y, grip_end_x, grip_end_y], width=grip_width)
+        
+        # Grip highlight
+        Color(0.4, 0.35, 0.3, 0.6)
+        Line(points=[grip_x, grip_y, grip_end_x, grip_end_y], width=grip_width * 0.5)
+        
+        # Draw current bubble with 3D effect (positioned at back of bazooka)
         if self.current_bubble and not self.current_bubble.attached:
-            # Draw bubble at shooter tip position without modifying bubble properties
-            self.draw_bubble_3d(self.current_bubble, x=end_x, y=end_y)
+            # Draw bubble at the back of bazooka (near base) without modifying bubble properties
+            self.draw_bubble_3d(self.current_bubble, x=bubble_x, y=bubble_y)
         
-        # Draw aim line (shows current aim direction)
-        aim_line_length = 300 * self.scale  # 100 * 3
-        aim_end_x = x + math.cos(angle_rad) * aim_line_length
-        aim_end_y = y + math.sin(angle_rad) * aim_line_length
+        # Draw laser that stops at the closest ball
+        laser_start_x = end_x
+        laser_start_y = end_y
+        laser_dir_x = math.cos(angle_rad)
+        laser_dir_y = math.sin(angle_rad)
         
-        Color(1, 1, 1, 0.4)  # White, semi-transparent
-        Line(points=[x, y, aim_end_x, aim_end_y], width=6 * self.scale)  # 2 * 3
+        # Find the closest ball that the laser would hit using proper line-circle intersection
+        min_distance = float('inf')
+        hit_point_x = None
+        hit_point_y = None
+        
+        # Check all grid bubbles to find the first one the laser hits
+        for grid_bubble in self.grid_bubbles:
+            # Vector from laser start to bubble center
+            dx = grid_bubble.x - laser_start_x
+            dy = grid_bubble.y - laser_start_y
+            
+            # Project bubble center onto laser direction
+            proj_length = dx * laser_dir_x + dy * laser_dir_y
+            
+            # Only consider bubbles in front of the laser
+            if proj_length < 0:
+                continue
+            
+            # Closest point on laser ray to bubble center
+            closest_x = laser_start_x + laser_dir_x * proj_length
+            closest_y = laser_start_y + laser_dir_y * proj_length
+            
+            # Distance from bubble center to laser ray
+            dist_to_line = math.sqrt((grid_bubble.x - closest_x)**2 + (grid_bubble.y - closest_y)**2)
+            
+            # Check if laser ray intersects the bubble
+            if dist_to_line <= grid_bubble.radius:
+                # Calculate the actual intersection point using line-circle intersection
+                # Distance along the ray from closest point to intersection
+                # Using Pythagorean theorem: radius^2 = dist_to_line^2 + offset^2
+                offset = math.sqrt(grid_bubble.radius**2 - dist_to_line**2)
+                
+                # Intersection point is offset back along the ray from closest point
+                # (towards laser start, so we get the first intersection)
+                intersect_x = closest_x - laser_dir_x * offset
+                intersect_y = closest_y - laser_dir_y * offset
+                
+                # Verify this point is in front of laser start (should be, but check)
+                dist_to_intersect = math.sqrt((intersect_x - laser_start_x)**2 + (intersect_y - laser_start_y)**2)
+                
+                # Check if intersection is in the forward direction
+                dot_product = (intersect_x - laser_start_x) * laser_dir_x + (intersect_y - laser_start_y) * laser_dir_y
+                if dot_product > 0 and dist_to_intersect < min_distance:
+                    min_distance = dist_to_intersect
+                    hit_point_x = intersect_x
+                    hit_point_y = intersect_y
+        
+        # If no bubble hit, extend laser to screen edge
+        if hit_point_x is None:
+            # Extend laser to screen edge
+            max_length = max(self.width, self.height) * 2  # Long enough to reach edge
+            hit_point_x = laser_start_x + laser_dir_x * max_length
+            hit_point_y = laser_start_y + laser_dir_y * max_length
+        
+        # Draw laser target point/dot at hit location (no line, just the point)
+        dot_size = 10 * self.scale
+        # Outer glow of dot
+        Color(1.0, 0.3, 0.5, 0.6)  # Pink-red glow
+        Ellipse(pos=(hit_point_x - dot_size * 1.5, hit_point_y - dot_size * 1.5), 
+               size=(dot_size * 3, dot_size * 3))
+        
+        # Main laser dot
+        Color(1.0, 0.2, 0.4, 1.0)  # Bright pink-red
+        Ellipse(pos=(hit_point_x - dot_size, hit_point_y - dot_size), 
+               size=(dot_size * 2, dot_size * 2))
+        
+        # Inner bright core of dot
+        Color(1.0, 0.5, 0.7, 1.0)  # Bright pink-white
+        Ellipse(pos=(hit_point_x - dot_size * 0.5, hit_point_y - dot_size * 0.5), 
+               size=(dot_size, dot_size))
     
     def draw_ui(self):
         """Draw UI elements with beautiful design"""
