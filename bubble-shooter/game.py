@@ -33,8 +33,8 @@ AIR = 3
 ELEMENT_COLORS = {
     FIRE: (1.0, 0.4, 0.2),      # Orange/Red
     WATER: (0.2, 0.7, 1.0),     # Blue
-    EARTH: (0.6, 0.4, 0.2),     # Brown
-    AIR: (0.9, 0.95, 1.0)       # Light Blue/White
+    EARTH: (1.0, 0.9, 0.2),     # Yellow (replaced brown)
+    AIR: (0.6, 0.2, 0.9)        # Purple (replaced white/light blue)
 }
 
 
