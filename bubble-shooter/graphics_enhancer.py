@@ -343,6 +343,203 @@ class GraphicsEnhancer:
         
         return self._pil_to_kivy_texture(img)
     
+    def create_bazooka_texture(self, length, width, base_radius, tip_radius, angle_rad=0):
+        """Create a beautiful high-quality bazooka texture with depth and detail"""
+        if not PIL_AVAILABLE:
+            return None
+        
+        # Scale for high quality rendering
+        scale = 2.0
+        tex_length = int(length * scale)
+        tex_width = int(width * scale)
+        tex_base_radius = int(base_radius * scale)
+        tex_tip_radius = int(tip_radius * scale)
+        
+        # Create image with padding
+        padding = int(tex_base_radius * 1.5)
+        img_width = tex_length + padding * 2
+        img_height = max(tex_base_radius * 2, tex_width) + padding * 2
+        img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Calculate positions (bazooka pointing right)
+        start_x = padding
+        start_y = img_height // 2
+        end_x = start_x + tex_length
+        end_y = start_y
+        
+        # Draw bazooka base (circular metallic base)
+        base_center_x = start_x
+        base_center_y = start_y
+        
+        # Base metallic gradient with 3D effect
+        for y in range(img_height):
+            for x in range(img_width):
+                dx = x - base_center_x
+                dy = y - base_center_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if dist <= tex_base_radius:
+                    # Calculate 3D position on sphere
+                    nx = dx / tex_base_radius
+                    ny = dy / tex_base_radius
+                    z_squared = 1.0 - (nx*nx + ny*ny)
+                    if z_squared < 0:
+                        continue
+                    nz = math.sqrt(z_squared)
+                    
+                    # Lighting from top-left
+                    light_dir_x = -0.5
+                    light_dir_y = -0.5
+                    light_dir_z = 0.7
+                    light_len = math.sqrt(light_dir_x**2 + light_dir_y**2 + light_dir_z**2)
+                    light_dir_x /= light_len
+                    light_dir_y /= light_len
+                    light_dir_z /= light_len
+                    
+                    dot_product = nx * light_dir_x + ny * light_dir_y + nz * light_dir_z
+                    dot_product = max(0.0, min(1.0, dot_product))
+                    
+                    # Metallic gray with lighting
+                    ambient = 0.25
+                    diffuse = dot_product * 0.75
+                    brightness = ambient + diffuse
+                    
+                    # Metallic color (dark gray to light gray)
+                    gray = int(brightness * 200)
+                    img.putpixel((x, y), (gray, gray, int(gray * 1.1), 255))
+        
+        # Add base rim highlight
+        rim_width = int(3 * scale)
+        for y in range(img_height):
+            for x in range(img_width):
+                dx = x - base_center_x
+                dy = y - base_center_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if tex_base_radius - rim_width <= dist <= tex_base_radius:
+                    # Bright rim on top-left
+                    angle = math.atan2(dy, dx)
+                    if angle < -math.pi/4 and angle > -3*math.pi/4:
+                        r, g, b, a = img.getpixel((x, y))
+                        bright = min(255, int(r + 80))
+                        img.putpixel((x, y), (bright, bright, bright, a))
+        
+        # Draw bazooka barrel (cylindrical with metallic finish)
+        half_width = tex_width // 2
+        
+        # Draw barrel body with cylindrical shading
+        for y in range(img_height):
+            for x in range(img_width):
+                # Check if point is within barrel rectangle
+                if start_x <= x <= end_x:
+                    # Calculate distance from barrel center line
+                    dist_from_center = abs(y - start_y)
+                    
+                    if dist_from_center <= half_width:
+                        # Calculate position along barrel (0 to 1)
+                        barrel_pos = (x - start_x) / tex_length
+                        
+                        # Cylindrical shading (brighter on top, darker on bottom)
+                        vertical_pos = (y - (start_y - half_width)) / tex_width
+                        brightness = 0.4 + 0.6 * (1.0 - vertical_pos)  # Brighter at top
+                        
+                        # Add barrel segments/rings
+                        segment_factor = 1.0
+                        if int(barrel_pos * 4) % 2 == 0:
+                            segment_factor = 0.95  # Slightly darker segments
+                        
+                        brightness *= segment_factor
+                        
+                        # Metallic gray color
+                        gray = int(brightness * 180)
+                        img.putpixel((x, y), (gray, gray, int(gray * 1.05), 255))
+        
+        # Add barrel top highlight
+        highlight_width = int(tex_width * 0.3)
+        for y in range(start_y - half_width, start_y - half_width + highlight_width):
+            for x in range(start_x, end_x):
+                r, g, b, a = img.getpixel((x, y))
+                bright = min(255, int(r + 60))
+                img.putpixel((x, y), (bright, bright, bright, a))
+        
+        # Add barrel reinforcement bands
+        band_positions = [0.2, 0.6]
+        for band_pos in band_positions:
+            band_x = int(start_x + tex_length * band_pos)
+            band_width = int(4 * scale)
+            for y in range(start_y - half_width, start_y + half_width):
+                for x in range(band_x - band_width, band_x + band_width):
+                    if 0 <= x < img_width and 0 <= y < img_height:
+                        r, g, b, a = img.getpixel((x, y))
+                        dark = max(0, int(r - 40))
+                        img.putpixel((x, y), (dark, dark, dark, a))
+        
+        # Draw bazooka tip/muzzle
+        tip_center_x = end_x
+        tip_center_y = start_y
+        
+        # Tip metallic circle
+        for y in range(img_height):
+            for x in range(img_width):
+                dx = x - tip_center_x
+                dy = y - tip_center_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if dist <= tex_tip_radius:
+                    # 3D sphere shading
+                    nx = dx / tex_tip_radius
+                    ny = dy / tex_tip_radius
+                    z_squared = 1.0 - (nx*nx + ny*ny)
+                    if z_squared < 0:
+                        continue
+                    nz = math.sqrt(z_squared)
+                    
+                    # Lighting
+                    light_dir_x = -0.5
+                    light_dir_y = -0.5
+                    light_dir_z = 0.7
+                    light_len = math.sqrt(light_dir_x**2 + light_dir_y**2 + light_dir_z**2)
+                    light_dir_x /= light_len
+                    light_dir_y /= light_len
+                    light_dir_z /= light_len
+                    
+                    dot_product = nx * light_dir_x + ny * light_dir_y + nz * light_dir_z
+                    dot_product = max(0.0, min(1.0, dot_product))
+                    
+                    ambient = 0.2
+                    diffuse = dot_product * 0.8
+                    brightness = ambient + diffuse
+                    
+                    # Darker metallic for tip
+                    gray = int(brightness * 150)
+                    img.putpixel((x, y), (gray, gray, int(gray * 1.1), 255))
+        
+        # Muzzle opening (dark center)
+        muzzle_radius = int(tex_tip_radius * 0.55)
+        for y in range(img_height):
+            for x in range(img_width):
+                dx = x - tip_center_x
+                dy = y - tip_center_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if dist <= muzzle_radius:
+                    # Very dark center
+                    img.putpixel((x, y), (20, 20, 25, 255))
+        
+        # Add inner muzzle rim
+        rim_radius = int(muzzle_radius * 0.9)
+        for y in range(img_height):
+            for x in range(img_width):
+                dx = x - tip_center_x
+                dy = y - tip_center_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if rim_radius - 2 <= dist <= rim_radius:
+                    img.putpixel((x, y), (80, 80, 90, 255))
+        
+        return self._pil_to_kivy_texture(img)
+    
     def _pil_to_kivy_texture(self, pil_image):
         """Convert PIL Image to Kivy Texture"""
         # Convert PIL image to bytes

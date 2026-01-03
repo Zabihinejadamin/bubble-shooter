@@ -180,6 +180,7 @@ class BubbleShooterGame(Widget):
         # Enhanced graphics system
         self.graphics_enhancer = None
         self.bubble_textures = {}  # Cache for bubble textures
+        self.bazooka_textures = {}  # Cache for bazooka textures
         if GRAPHICS_ENHANCER_AVAILABLE:
             self.graphics_enhancer = GraphicsEnhancer()
             self.graphics_enhancer.set_scale(self.scale)
