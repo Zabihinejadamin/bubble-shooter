@@ -278,8 +278,19 @@ class BubbleShooterGame(Widget):
         # Check if level has custom pattern method
         has_custom_pattern = hasattr(self.current_level, 'should_place_bubble')
         
+        # Maximum number of bubbles limit (must be less than 140)
+        MAX_BUBBLES = 139
+        
         for row in range(self.grid_height):
+            # Check bubble limit before processing each row
+            if len(self.grid_bubbles) >= MAX_BUBBLES:
+                break  # Stop if we've reached the maximum
+            
             for col in range(self.grid_width):
+                # Check bubble limit before processing each column
+                if len(self.grid_bubbles) >= MAX_BUBBLES:
+                    break  # Stop if we've reached the maximum
+                
                 # Check custom pattern if available
                 if has_custom_pattern:
                     if not self.current_level.should_place_bubble(row, col):
