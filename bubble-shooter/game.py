@@ -682,9 +682,8 @@ class BubbleShooterGame(Widget):
         # Update particles
         self.update_particles(dt)
         
-        # Update airplane (for levels > 7, but testing on level 1)
-        # For testing, show airplane in level 1; normally would be: if self.level > 7:
-        if self.level >= 1:  # Testing on level 1
+        # Update airplane (only for levels > 7)
+        if self.level > 7:
             # Spawn airplane if needed
             if self.airplane is None or not self.airplane.active:
                 self.airplane_spawn_timer += dt
@@ -1020,7 +1019,7 @@ class BubbleShooterGame(Widget):
             self.game_active = False  # Player wins!
     
     def explode_airplane(self, x, y):
-        """Explode airplane and remove all bubbles within radius 8"""
+        """Explode airplane and remove all bubbles within radius 4"""
         if self.airplane:
             self.airplane.exploded = True
             self.airplane.active = False
@@ -1028,8 +1027,8 @@ class BubbleShooterGame(Widget):
         # Create large explosion particles
         self.create_explosion_particles(x, y, (1.0, 0.5, 0.0), particle_count=30, speed_multiplier=2.0)
         
-        # Find and remove all bubbles within radius 8 (scaled)
-        explosion_radius = 8 * self.grid_spacing  # Radius 8 in grid units, converted to pixels
+        # Find and remove all bubbles within radius 4 (scaled)
+        explosion_radius = 4 * self.grid_spacing  # Radius 4 in grid units, converted to pixels
         bubbles_to_remove = []
         
         for bubble in self.grid_bubbles[:]:
