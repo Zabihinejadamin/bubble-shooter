@@ -38,6 +38,54 @@ ELEMENT_COLORS = {
 }
 
 
+class Airplane:
+    """Represents an airplane that crosses the screen"""
+    
+    def __init__(self, x, y, direction=1, speed=200):
+        self.x = x
+        self.y = y
+        self.direction = direction  # 1 for right, -1 for left
+        self.speed = speed
+        self.width = 160  # Airplane width (doubled from 80)
+        self.height = 80  # Airplane height (doubled from 40)
+        self.active = True
+        self.exploded = False
+    
+    def update(self, dt, screen_width):
+        """Update airplane position"""
+        if not self.active or self.exploded:
+            return
+        
+        # Move airplane (direction: 1 = right, -1 = left)
+        # Use += for correct forward movement
+        self.x += self.direction * self.speed * dt
+        
+        # Check if airplane has left the screen
+        if self.direction > 0 and self.x > screen_width + self.width:
+            self.active = False
+        elif self.direction < 0 and self.x < -self.width:
+            self.active = False
+    
+    def check_collision(self, bubble):
+        """Check if a bubble collides with the airplane"""
+        if not self.active or self.exploded:
+            return False
+        
+        # Simple rectangle collision
+        bubble_left = bubble.x - bubble.radius
+        bubble_right = bubble.x + bubble.radius
+        bubble_top = bubble.y + bubble.radius
+        bubble_bottom = bubble.y - bubble.radius
+        
+        airplane_left = self.x - self.width / 2
+        airplane_right = self.x + self.width / 2
+        airplane_top = self.y + self.height / 2
+        airplane_bottom = self.y - self.height / 2
+        
+        return (bubble_right >= airplane_left and bubble_left <= airplane_right and
+                bubble_top >= airplane_bottom and bubble_bottom <= airplane_top)
+
+
 class Bubble:
     """Represents a single bubble"""
     
@@ -177,6 +225,10 @@ class BubbleShooterGame(Widget):
         self.gold_texture = None
         self.load_gold_image()
         
+        # Fighter jet image
+        self.jet_texture = None
+        self.load_jet_image()
+        
         # Enhanced graphics system
         self.graphics_enhancer = None
         self.bubble_textures = {}  # Cache for bubble textures
@@ -187,6 +239,12 @@ class BubbleShooterGame(Widget):
         
         # Particle effects for explosions
         self.particles = []  # List of particle dictionaries
+        
+        # Airplane (for levels > 7, but testing on level 1)
+        self.airplane = None
+        self.airplane_spawn_timer = 0
+        self.airplane_spawn_interval = random.uniform(2.0, 5.0)  # Random spawn interval (2-5 seconds) - faster for testing
+        self.airplane_texture = None  # Cache for airplane texture
         
         # Call on_size immediately and also after a short delay to ensure window size is set
         # This ensures scaling works even if window size is already available
@@ -350,7 +408,7 @@ class BubbleShooterGame(Widget):
         self.current_bubble = self.next_bubble
     
     def on_touch_down(self, touch, *args):
-        """Handle touch down - shoot bubble or handle button clicks"""
+        """Handle touch down - aim bazooka or handle button clicks"""
         try:
             # Check if game is over and handle button clicks
             if not self.game_active:
@@ -361,6 +419,46 @@ class BubbleShooterGame(Widget):
             if self.current_bubble.attached:
                 return super().on_touch_down(touch)
                 
+            # Calculate direction toward touch point and update aim angle (aiming only)
+            dx = touch.x - self.shooter_x
+            dy = touch.y - self.shooter_y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance > 10:  # Minimum distance to aim
+                # Update aim angle (just aiming, not shooting yet)
+                self.aim_angle = math.degrees(math.atan2(dy, dx))
+                
+                # Set bubble position at back of bazooka (update position while aiming)
+                angle_rad = math.radians(self.aim_angle)
+                base_radius = self.bubble_radius * 0.85  # Match the base radius used in drawing
+                bubble_offset = base_radius * 0.8  # Position bubble slightly forward from base center
+                self.current_bubble.x = self.shooter_x + math.cos(angle_rad) * bubble_offset
+                self.current_bubble.y = self.shooter_y + math.sin(angle_rad) * bubble_offset
+                
+                return True
+        except Exception as e:
+            print(f"Error in on_touch_down: {e}")
+        return super().on_touch_down(touch)
+    
+    def on_touch_move(self, touch, *args):
+        """Handle touch move - update aim angle (for visual feedback)"""
+        dx = touch.x - self.shooter_x
+        dy = touch.y - self.shooter_y
+        self.aim_angle = math.degrees(math.atan2(dy, dx))
+        return super().on_touch_move(touch)
+    
+    def on_touch_up(self, touch, *args):
+        """Handle touch up - shoot bubble when released"""
+        try:
+            # Check if game is over
+            if not self.game_active:
+                return super().on_touch_up(touch, *args)
+            
+            if self.current_bubble is None:
+                return super().on_touch_up(touch, *args)
+            if self.current_bubble.attached:
+                return super().on_touch_up(touch, *args)
+            
             # Calculate direction toward touch point
             dx = touch.x - self.shooter_x
             dy = touch.y - self.shooter_y
@@ -369,9 +467,9 @@ class BubbleShooterGame(Widget):
             if distance > 10:  # Minimum distance to shoot
                 # Check if player has shots remaining
                 if self.shots_remaining <= 0:
-                    return super().on_touch_down(touch)
+                    return super().on_touch_up(touch, *args)
                 
-                # Update aim angle
+                # Update aim angle one final time
                 self.aim_angle = math.degrees(math.atan2(dy, dx))
                 
                 # Set bubble position at back of bazooka before shooting
@@ -398,19 +496,11 @@ class BubbleShooterGame(Widget):
                 
                 return True
         except Exception as e:
-            print(f"Error in on_touch_down: {e}")
-        return super().on_touch_down(touch)
-    
-    def on_touch_move(self, touch, *args):
-        """Handle touch move - update aim angle (for visual feedback)"""
-        dx = touch.x - self.shooter_x
-        dy = touch.y - self.shooter_y
-        self.aim_angle = math.degrees(math.atan2(dy, dx))
-        return super().on_touch_move(touch)
-    
-    def on_touch_up(self, touch, *args):
-        """Handle touch up - no action needed, shooting happens on touch_down"""
-        return super().on_touch_up(touch)
+            import traceback
+            traceback.print_exc()
+            return super().on_touch_up(touch, *args)
+        
+        return super().on_touch_up(touch, *args)
     
     def handle_game_over_click(self, touch):
         """Handle button clicks on game over screen"""
@@ -592,6 +682,46 @@ class BubbleShooterGame(Widget):
         # Update particles
         self.update_particles(dt)
         
+        # Update airplane (for levels > 7, but testing on level 1)
+        # For testing, show airplane in level 1; normally would be: if self.level > 7:
+        if self.level >= 1:  # Testing on level 1
+            # Spawn airplane if needed
+            if self.airplane is None or not self.airplane.active:
+                self.airplane_spawn_timer += dt
+                if self.airplane_spawn_timer >= self.airplane_spawn_interval:
+                    self.airplane_spawn_timer = 0
+                    # Set next random spawn interval
+                    self.airplane_spawn_interval = random.uniform(2.0, 5.0)
+                    
+                    # Randomly choose direction (left or right)
+                    direction = random.choice([-1, 1])
+                    # Calculate minimum Y value (1200 in base resolution, scaled)
+                    min_y_base = 1200
+                    min_y_scaled = min_y_base * (self.height / self.base_height) if self.height > 0 else min_y_base
+                    # Randomly choose Y position (minimum 1200, up to 85% of screen height)
+                    max_y = self.height * 0.85
+                    y_pos = min_y_scaled + random.random() * (max_y - min_y_scaled)
+                    if direction > 0:
+                        # Moving right: start from left side
+                        x_pos = -150
+                    else:
+                        # Moving left: start from right side
+                        x_pos = self.width + 150
+                    self.airplane = Airplane(x_pos, y_pos, direction, speed=200 * self.scale)
+            
+            # Update airplane
+            if self.airplane and self.airplane.active:
+                self.airplane.update(dt, self.width)
+                
+                # Check collision with shot bubbles
+                for bubble in self.shot_bubbles[:]:
+                    if self.airplane.check_collision(bubble):
+                        # Airplane hit! Explode it
+                        self.explode_airplane(self.airplane.x, self.airplane.y)
+                        # Remove the bubble that hit it
+                        self.shot_bubbles.remove(bubble)
+                        break
+        
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
             bubble.update(dt)
@@ -650,6 +780,7 @@ class BubbleShooterGame(Widget):
             self.draw_background()
             self.draw_grid()
             self.draw_shot_bubbles()
+            self.draw_airplane()  # Draw airplane
             self.draw_shooter()
             self.draw_particles()  # Draw particles on top
             self.draw_ui()
@@ -876,6 +1007,46 @@ class BubbleShooterGame(Widget):
         
         # Create large explosion effect at dynamite position
         self.create_explosion_particles(x, y, (1.0, 0.5, 0.2), particle_count=30, speed_multiplier=2.0)
+        
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            self.score += exploded_count * self.shots_remaining
+        
+        # Check for floating bubbles after explosion
+        self.check_floating_bubbles()
+        
+        # Check if all bubbles are cleared (win condition)
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
+    
+    def explode_airplane(self, x, y):
+        """Explode airplane and remove all bubbles within radius 8"""
+        if self.airplane:
+            self.airplane.exploded = True
+            self.airplane.active = False
+        
+        # Create large explosion particles
+        self.create_explosion_particles(x, y, (1.0, 0.5, 0.0), particle_count=30, speed_multiplier=2.0)
+        
+        # Find and remove all bubbles within radius 8 (scaled)
+        explosion_radius = 8 * self.grid_spacing  # Radius 8 in grid units, converted to pixels
+        bubbles_to_remove = []
+        
+        for bubble in self.grid_bubbles[:]:
+            dx = bubble.x - x
+            dy = bubble.y - y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance <= explosion_radius:
+                # Create particle effect for this bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
+                bubbles_to_remove.append(bubble)
+        
+        # Remove bubbles and add score
+        exploded_count = len(bubbles_to_remove)
+        for bubble in bubbles_to_remove:
+            if bubble in self.grid_bubbles:
+                self.grid_bubbles.remove(bubble)
         
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
@@ -1147,7 +1318,13 @@ class BubbleShooterGame(Widget):
     
     def load_background_image(self):
         """Load background image texture"""
-        background_path = self.get_asset_path("grunge-white-surface-rough-background-textured.jpg")
+        # Use the specified background image
+        background_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\10013168.jpg"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(background_path):
+            background_path = self.get_asset_path("10013168.jpg")
+        
         if background_path and os.path.exists(background_path):
             try:
                 img = CoreImage(background_path)
@@ -1156,7 +1333,7 @@ class BubbleShooterGame(Widget):
                 print(f"Error loading background image: {e}")
                 self.background_texture = None
         else:
-            print(f"Background image not found: grunge-white-surface-rough-background-textured.jpg")
+            print(f"Background image not found: {background_path}")
             self.background_texture = None
     
     def load_dynamite_image(self):
@@ -1250,6 +1427,26 @@ class BubbleShooterGame(Widget):
         else:
             print(f"Mine image not found: istockphoto-1474907248-612x612.jpg")
             self.mine_texture = None
+    
+    def load_jet_image(self):
+        """Load fighter jet image texture"""
+        # Use the specified jet image
+        jet_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\jet.png"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(jet_path):
+            jet_path = self.get_asset_path("jet.png")
+        
+        if jet_path and os.path.exists(jet_path):
+            try:
+                img = CoreImage(jet_path)
+                self.jet_texture = img.texture
+            except Exception as e:
+                print(f"Error loading jet image: {e}")
+                self.jet_texture = None
+        else:
+            print(f"Jet image not found: {jet_path}")
+            self.jet_texture = None
     
     def load_gold_image(self):
         """Load gold bubble image texture with background removed"""
@@ -1534,6 +1731,147 @@ class BubbleShooterGame(Widget):
                 
                 Color(1, 0.95, 0.5, 1)  # Bright gold for star
                 Line(points=star_points, width=6 * self.scale, close=True)  # 2 * 3
+    
+    def draw_airplane(self):
+        """Draw the fighter jet if it's active using image texture"""
+        if not self.airplane or not self.airplane.active:
+            return
+        
+        x = self.airplane.x
+        y = self.airplane.y
+        width = self.airplane.width * self.scale
+        height = self.airplane.height * self.scale
+        
+        # Use jet image if available
+        if self.jet_texture:
+            Color(1, 1, 1, 1)
+            # Mirror horizontally if moving left (using negative width)
+            if self.airplane.direction < 0:
+                # For left direction, mirror by using negative width
+                # Position is adjusted: x + width/2 instead of x - width/2
+                Rectangle(texture=self.jet_texture, 
+                         pos=(x + width/2, y - height/2),
+                         size=(-width, height))
+            else:
+                # Normal direction (right)
+                Rectangle(texture=self.jet_texture, 
+                         pos=(x - width/2, y - height/2),
+                         size=(width, height))
+            return
+        
+        # Fallback to enhanced graphics if image not available
+        use_enhanced = (self.graphics_enhancer is not None and 
+                       GRAPHICS_ENHANCER_AVAILABLE and PIL_AVAILABLE)
+        
+        if use_enhanced:
+            # Generate or get cached fighter jet texture
+            cache_key = f"fighter_jet_{int(width)}_{int(height)}_{self.airplane.direction}"
+            airplane_texture = self.bazooka_textures.get(cache_key)
+            
+            if airplane_texture is None:
+                airplane_texture = self.graphics_enhancer.create_fighter_jet_texture(
+                    width, height, self.airplane.direction
+                )
+                if airplane_texture:
+                    self.bazooka_textures[cache_key] = airplane_texture
+            
+            if airplane_texture:
+                Color(1, 1, 1, 1)
+                Rectangle(texture=airplane_texture, 
+                         pos=(x - width/2, y - height/2),
+                         size=(width, height))
+                return
+        
+        # Fallback to basic drawing if enhanced graphics not available
+        # Draw fighter jet body (main fuselage)
+        Color(0.3, 0.3, 0.4, 1)  # Gray-blue color
+        Rectangle(pos=(x - width/2, y - height/2), size=(width * 0.4, height * 0.6))
+        
+        # Draw nose cone (pointed)
+        nose_length = width * 0.3
+        if self.airplane.direction > 0:  # Moving right
+            nose_points = [
+                x + width * 0.2, y,
+                x + width * 0.2 + nose_length, y - height * 0.15,
+                x + width * 0.2 + nose_length, y + height * 0.15
+            ]
+        else:  # Moving left
+            nose_points = [
+                x - width * 0.2, y,
+                x - width * 0.2 - nose_length, y - height * 0.15,
+                x - width * 0.2 - nose_length, y + height * 0.15
+            ]
+        Line(points=nose_points, close=True, width=2)
+        
+        # Draw swept-back wings
+        wing_width = width * 0.6
+        wing_height = height * 0.15
+        Color(0.25, 0.25, 0.35, 1)  # Slightly darker
+        
+        # Top wing (swept back)
+        if self.airplane.direction > 0:
+            top_wing_points = [
+                x - width * 0.15, y - height * 0.3,
+                x + width * 0.25, y - height * 0.3 - wing_height,
+                x + width * 0.25, y - height * 0.3,
+                x - width * 0.15, y - height * 0.3
+            ]
+        else:
+            top_wing_points = [
+                x + width * 0.15, y - height * 0.3,
+                x - width * 0.25, y - height * 0.3 - wing_height,
+                x - width * 0.25, y - height * 0.3,
+                x + width * 0.15, y - height * 0.3
+            ]
+        Line(points=top_wing_points, close=True, width=2)
+        
+        # Bottom wing (swept back)
+        if self.airplane.direction > 0:
+            bottom_wing_points = [
+                x - width * 0.15, y + height * 0.3,
+                x + width * 0.25, y + height * 0.3 + wing_height,
+                x + width * 0.25, y + height * 0.3,
+                x - width * 0.15, y + height * 0.3
+            ]
+        else:
+            bottom_wing_points = [
+                x + width * 0.15, y + height * 0.3,
+                x - width * 0.25, y + height * 0.3 + wing_height,
+                x - width * 0.25, y + height * 0.3,
+                x + width * 0.15, y + height * 0.3
+            ]
+        Line(points=bottom_wing_points, close=True, width=2)
+        
+        # Draw tail fins (vertical stabilizers)
+        tail_width = width * 0.1
+        tail_height = height * 0.4
+        tail_x = x - width * 0.2
+        Color(0.2, 0.2, 0.3, 1)  # Darker
+        
+        # Left tail fin
+        tail_left_points = [
+            tail_x, y - height * 0.3,
+            tail_x - tail_width, y - height * 0.3 - tail_height,
+            tail_x, y - height * 0.3 - tail_height * 0.5
+        ]
+        Line(points=tail_left_points, close=True, width=2)
+        
+        # Right tail fin
+        tail_right_points = [
+            tail_x, y + height * 0.3,
+            tail_x - tail_width, y + height * 0.3 + tail_height,
+            tail_x, y + height * 0.3 + tail_height * 0.5
+        ]
+        Line(points=tail_right_points, close=True, width=2)
+        
+        # Draw cockpit (canopy)
+        canopy_width = width * 0.25
+        canopy_height = height * 0.2
+        canopy_x = x + width * 0.1 if self.airplane.direction > 0 else x - width * 0.1
+        canopy_y = y - height * 0.2
+        Color(0.4, 0.6, 0.8, 0.8)  # Blue tinted canopy
+        Ellipse(pos=(canopy_x - canopy_width/2, canopy_y - canopy_height/2),
+               size=(canopy_width, canopy_height))
     
     def draw_shooter(self):
         """Draw bazooka-style shooter with laser aim"""

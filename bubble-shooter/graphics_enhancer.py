@@ -540,6 +540,273 @@ class GraphicsEnhancer:
         
         return self._pil_to_kivy_texture(img)
     
+    def create_fighter_jet_texture(self, width, height, direction=1):
+        """Create a high-quality fighter jet texture (F5/F14 style) with improved graphics"""
+        if not PIL_AVAILABLE:
+            return None
+        
+        # Scale for high quality
+        scale = 3.0  # Higher scale for better quality
+        tex_width = int(width * scale)
+        tex_height = int(height * scale)
+        
+        img = Image.new('RGBA', (tex_width, tex_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        center_x = tex_width // 2
+        center_y = tex_height // 2
+        
+        # Fighter jet body (main fuselage) - longer and sleeker
+        body_width = int(tex_width * 0.5)
+        body_height = int(tex_height * 0.5)
+        body_left = center_x - body_width // 2
+        body_top = center_y - body_height // 2
+        
+        # Draw main fuselage with advanced metallic gradient and 3D shading
+        for y in range(tex_height):
+            for x in range(tex_width):
+                # Check if in fuselage area
+                if body_left <= x <= body_left + body_width and body_top <= y <= body_top + body_height:
+                    # Calculate 3D position on cylinder
+                    nx = (x - center_x) / (body_width / 2)
+                    ny = (y - center_y) / (body_height / 2)
+                    
+                    # Lighting from top-left
+                    light_dir_x = -0.7
+                    light_dir_y = -0.7
+                    light_dir_z = 0.5
+                    light_len = math.sqrt(light_dir_x**2 + light_dir_y**2 + light_dir_z**2)
+                    light_dir_x /= light_len
+                    light_dir_y /= light_len
+                    light_dir_z /= light_len
+                    
+                    # Calculate normal for cylinder
+                    z_squared = 1.0 - (nx*nx)
+                    if z_squared < 0:
+                        continue
+                    nz = math.sqrt(z_squared)
+                    
+                    # Lambertian shading
+                    dot_product = nx * light_dir_x + ny * light_dir_y + nz * light_dir_z
+                    dot_product = max(0.0, min(1.0, dot_product))
+                    
+                    ambient = 0.3
+                    diffuse = dot_product * 0.7
+                    brightness = ambient + diffuse
+                    
+                    # Metallic gray-blue color with lighting
+                    base_gray = 160
+                    gray = int(base_gray * brightness)
+                    blue_tint = int(gray * 1.15)  # Slight blue tint
+                    img.putpixel((x, y), (gray, gray, blue_tint, 255))
+        
+        # Draw nose cone (pointed, more aerodynamic)
+        nose_length = int(tex_width * 0.35)
+        nose_base_width = int(body_height * 0.4)
+        if direction > 0:  # Moving right
+            nose_points = [
+                (center_x + body_width // 2, center_y),
+                (center_x + body_width // 2 + nose_length, center_y - nose_base_width),
+                (center_x + body_width // 2 + nose_length, center_y + nose_base_width)
+            ]
+        else:  # Moving left
+            nose_points = [
+                (center_x - body_width // 2, center_y),
+                (center_x - body_width // 2 - nose_length, center_y - nose_base_width),
+                (center_x - body_width // 2 - nose_length, center_y + nose_base_width)
+            ]
+        # Draw nose with gradient
+        draw.polygon(nose_points, fill=(220, 220, 240, 255))
+        
+        # Add nose highlight
+        if direction > 0:
+            nose_highlight_points = [
+                (center_x + body_width // 2 + nose_length * 0.3, center_y - nose_base_width * 0.3),
+                (center_x + body_width // 2 + nose_length * 0.7, center_y - nose_base_width * 0.5),
+                (center_x + body_width // 2 + nose_length * 0.7, center_y),
+                (center_x + body_width // 2 + nose_length * 0.3, center_y)
+            ]
+        else:
+            nose_highlight_points = [
+                (center_x - body_width // 2 - nose_length * 0.3, center_y - nose_base_width * 0.3),
+                (center_x - body_width // 2 - nose_length * 0.7, center_y - nose_base_width * 0.5),
+                (center_x - body_width // 2 - nose_length * 0.7, center_y),
+                (center_x - body_width // 2 - nose_length * 0.3, center_y)
+            ]
+        draw.polygon(nose_highlight_points, fill=(240, 240, 255, 200))
+        
+        # Draw wings (swept back, more detailed)
+        wing_width = int(tex_width * 0.7)
+        wing_height = int(tex_height * 0.2)
+        
+        # Top wing with gradient
+        if direction > 0:
+            top_wing_points = [
+                (center_x - wing_width // 3, center_y - body_height // 2),
+                (center_x + wing_width // 2, center_y - body_height // 2 - wing_height),
+                (center_x + wing_width // 2, center_y - body_height // 2),
+                (center_x - wing_width // 3, center_y - body_height // 2)
+            ]
+        else:
+            top_wing_points = [
+                (center_x + wing_width // 3, center_y - body_height // 2),
+                (center_x - wing_width // 2, center_y - body_height // 2 - wing_height),
+                (center_x - wing_width // 2, center_y - body_height // 2),
+                (center_x + wing_width // 3, center_y - body_height // 2)
+            ]
+        draw.polygon(top_wing_points, fill=(140, 140, 160, 255))
+        
+        # Top wing highlight
+        if direction > 0:
+            top_wing_highlight = [
+                (center_x - wing_width // 4, center_y - body_height // 2 - wing_height * 0.3),
+                (center_x + wing_width // 3, center_y - body_height // 2 - wing_height * 0.8),
+                (center_x + wing_width // 3, center_y - body_height // 2 - wing_height * 0.5),
+                (center_x - wing_width // 4, center_y - body_height // 2)
+            ]
+        else:
+            top_wing_highlight = [
+                (center_x + wing_width // 4, center_y - body_height // 2 - wing_height * 0.3),
+                (center_x - wing_width // 3, center_y - body_height // 2 - wing_height * 0.8),
+                (center_x - wing_width // 3, center_y - body_height // 2 - wing_height * 0.5),
+                (center_x + wing_width // 4, center_y - body_height // 2)
+            ]
+        draw.polygon(top_wing_highlight, fill=(180, 180, 200, 180))
+        
+        # Bottom wing
+        if direction > 0:
+            bottom_wing_points = [
+                (center_x - wing_width // 3, center_y + body_height // 2),
+                (center_x + wing_width // 2, center_y + body_height // 2 + wing_height),
+                (center_x + wing_width // 2, center_y + body_height // 2),
+                (center_x - wing_width // 3, center_y + body_height // 2)
+            ]
+        else:
+            bottom_wing_points = [
+                (center_x + wing_width // 3, center_y + body_height // 2),
+                (center_x - wing_width // 2, center_y + body_height // 2 + wing_height),
+                (center_x - wing_width // 2, center_y + body_height // 2),
+                (center_x + wing_width // 3, center_y + body_height // 2)
+            ]
+        draw.polygon(bottom_wing_points, fill=(140, 140, 160, 255))
+        
+        # Draw tail fins (vertical stabilizers) - more detailed
+        tail_width = int(tex_width * 0.12)
+        tail_height = int(tex_height * 0.5)
+        tail_x = center_x - body_width // 2
+        
+        # Left tail fin with gradient
+        tail_left_points = [
+            (tail_x, center_y - body_height // 2),
+            (tail_x - tail_width, center_y - body_height // 2 - tail_height),
+            (tail_x - tail_width * 0.3, center_y - body_height // 2 - tail_height * 0.7),
+            (tail_x, center_y - body_height // 2 - tail_height // 2)
+        ]
+        draw.polygon(tail_left_points, fill=(110, 110, 130, 255))
+        
+        # Right tail fin
+        tail_right_points = [
+            (tail_x, center_y + body_height // 2),
+            (tail_x - tail_width, center_y + body_height // 2 + tail_height),
+            (tail_x - tail_width * 0.3, center_y + body_height // 2 + tail_height * 0.7),
+            (tail_x, center_y + body_height // 2 + tail_height // 2)
+        ]
+        draw.polygon(tail_right_points, fill=(110, 110, 130, 255))
+        
+        # Add cockpit (canopy) - more realistic
+        canopy_width = int(tex_width * 0.3)
+        canopy_height = int(tex_height * 0.25)
+        canopy_x = center_x + body_width // 3 if direction > 0 else center_x - body_width // 3
+        canopy_y = center_y - body_height // 3
+        
+        # Draw canopy as ellipse with gradient
+        canopy_bbox = [
+            canopy_x - canopy_width // 2,
+            canopy_y - canopy_height // 2,
+            canopy_x + canopy_width // 2,
+            canopy_y + canopy_height // 2
+        ]
+        
+        # Canopy with blue tint and transparency
+        for y in range(tex_height):
+            for x in range(tex_width):
+                dx = x - canopy_x
+                dy = y - canopy_y
+                dist = math.sqrt((dx / (canopy_width / 2))**2 + (dy / (canopy_height / 2))**2)
+                if dist <= 1.0:
+                    # Blue tinted canopy with gradient
+                    intensity = 1.0 - dist
+                    r = int(80 + intensity * 40)
+                    g = int(120 + intensity * 60)
+                    b = int(180 + intensity * 50)
+                    alpha = int(180 + intensity * 60)
+                    img.putpixel((x, y), (r, g, b, alpha))
+        
+        # Add canopy highlight
+        highlight_bbox = [
+            canopy_x - canopy_width // 3,
+            canopy_y - canopy_height // 3,
+            canopy_x + canopy_width // 4,
+            canopy_y + canopy_height // 4
+        ]
+        draw.ellipse(highlight_bbox, fill=(150, 200, 255, 150))
+        
+        # Add engine intakes/exhaust details
+        if direction > 0:
+            # Exhaust on left side
+            exhaust_x = center_x - body_width // 2
+            exhaust_y = center_y
+            exhaust_radius = int(body_height * 0.15)
+            draw.ellipse([
+                exhaust_x - exhaust_radius, exhaust_y - exhaust_radius,
+                exhaust_x + exhaust_radius, exhaust_y + exhaust_radius
+            ], fill=(40, 40, 50, 255))
+        else:
+            # Exhaust on right side
+            exhaust_x = center_x + body_width // 2
+            exhaust_y = center_y
+            exhaust_radius = int(body_height * 0.15)
+            draw.ellipse([
+                exhaust_x - exhaust_radius, exhaust_y - exhaust_radius,
+                exhaust_x + exhaust_radius, exhaust_y + exhaust_radius
+            ], fill=(40, 40, 50, 255))
+        
+        # Add main body highlight for 3D effect
+        highlight_y = center_y - body_height // 3
+        for x in range(tex_width):
+            if body_left <= x <= body_left + body_width:
+                brightness = 0.7 + 0.3 * (1.0 - abs(x - center_x) / (body_width / 2))
+                gray = int(brightness * 200)
+                if 0 <= highlight_y < tex_height:
+                    r, g, b, a = img.getpixel((x, highlight_y))
+                    bright = min(255, int(r + 50))
+                    blue = min(255, int(b + 30))
+                    img.putpixel((x, highlight_y), (bright, bright, blue, a))
+        
+        # Add shadow/outline for depth
+        shadow_img = Image.new('RGBA', (tex_width, tex_height), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow_img)
+        
+        # Draw all shapes with slight offset for shadow
+        offset = 2
+        if direction > 0:
+            shadow_nose = [
+                (center_x + body_width // 2 + offset, center_y + offset),
+                (center_x + body_width // 2 + nose_length + offset, center_y - nose_base_width + offset),
+                (center_x + body_width // 2 + nose_length + offset, center_y + nose_base_width + offset)
+            ]
+        else:
+            shadow_nose = [
+                (center_x - body_width // 2 - offset, center_y + offset),
+                (center_x - body_width // 2 - nose_length - offset, center_y - nose_base_width + offset),
+                (center_x - body_width // 2 - nose_length - offset, center_y + nose_base_width + offset)
+            ]
+        shadow_draw.polygon(shadow_nose, fill=(0, 0, 0, 30))
+        shadow_img = shadow_img.filter(ImageFilter.GaussianBlur(radius=3))
+        img = Image.alpha_composite(img, shadow_img)
+        
+        return self._pil_to_kivy_texture(img)
+    
     def _pil_to_kivy_texture(self, pil_image):
         """Convert PIL Image to Kivy Texture"""
         # Convert PIL image to bytes
