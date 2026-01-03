@@ -33,9 +33,12 @@ class LevelBase:
         self.bubble_radius = 60  # 20 * 3.0
         self.grid_width = 10
         self.grid_height = 12
-        self.grid_spacing = 135  # 45 * 3.0
+        self.grid_spacing = 122  # Reduced for minimal gap between balls (minimum will be enforced to radius * 2.05 ≈ 123)
         self.grid_start_x = 300  # 100 * 3.0
-        self.grid_start_y = 2300  # Position from bottom, scaled for 2424 height (approximately 1015 * 2.26)
+        # grid_start_y positioned to minimize top margin (top bubble edge ~30px from top)
+        # Top bubble center at grid_start_y, edge at grid_start_y + radius
+        # For 2424 height: 2424 - 30 - 60 = 2334
+        self.grid_start_y = 2334  # Minimized top margin (~30px from top of screen)
         
         # Game state
         self.max_shots = 20

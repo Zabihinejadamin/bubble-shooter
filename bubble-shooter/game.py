@@ -271,7 +271,7 @@ class BubbleShooterGame(Widget):
         self.grid_bubbles = []
         
         # Ensure grid spacing is sufficient (minimum 2 * radius)
-        min_spacing = self.bubble_radius * 2.1  # Slightly more than 2 * radius
+        min_spacing = self.bubble_radius * 2.05  # Slightly more than 2 * radius (reduced for closer spacing)
         if self.grid_spacing < min_spacing:
             self.grid_spacing = min_spacing
         
