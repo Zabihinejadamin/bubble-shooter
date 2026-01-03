@@ -615,6 +615,9 @@ class BubbleShooterGame(Widget):
         self.current_bubble = None
         self.next_bubble = None
         
+        # Reload background image for the new level (if level changed)
+        self.load_background_image()
+        
         # Recalculate scaling and reinitialize grid with scaled values
         # This ensures positions and sizes are correct
         self.on_size()
@@ -1379,23 +1382,34 @@ class BubbleShooterGame(Widget):
         return None
     
     def load_background_image(self):
-        """Load background image texture"""
-        # Use the specified background image
-        background_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\10013168.jpg"
+        """Load background image texture based on level"""
+        # Levels 1-5: Keep current background (10013168.jpg) - no change
+        # Levels 6-9: Use 6869202.jpg
+        if self.level >= 6:
+            background_filename = "6869202.jpg"
+        else:
+            # Levels 1-5: Keep original background
+            background_filename = "10013168.jpg"
         
-        # Also try relative path for cross-platform compatibility
-        if not os.path.exists(background_path):
-            background_path = self.get_asset_path("10013168.jpg")
+        # Try relative path first (cross-platform compatibility)
+        background_path = self.get_asset_path(background_filename)
+        
+        # Also try hardcoded Windows path as fallback
+        if not background_path or not os.path.exists(background_path):
+            hardcoded_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\{}".format(background_filename)
+            if os.path.exists(hardcoded_path):
+                background_path = hardcoded_path
         
         if background_path and os.path.exists(background_path):
             try:
                 img = CoreImage(background_path)
                 self.background_texture = img.texture
+                print(f"Loaded background image for level {self.level}: {background_filename}")
             except Exception as e:
                 print(f"Error loading background image: {e}")
                 self.background_texture = None
         else:
-            print(f"Background image not found: {background_path}")
+            print(f"Background image not found: {background_filename}")
             self.background_texture = None
     
     def load_dynamite_image(self):
