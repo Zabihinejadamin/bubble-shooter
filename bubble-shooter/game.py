@@ -2422,8 +2422,8 @@ class BubbleShooterGame(Widget):
             score_panel_x = self.width - score_panel_width - 30 * self.scale
             
             # Level number position (above score box)
-            level_y_offset = level_label.texture.size[1] + 15 * self.scale  # Space between level and score box
-            level_panel_y = 30 * self.scale + score_panel_height + level_y_offset
+            # Position level panel directly above score panel with minimal gap
+            level_panel_y = 30 * self.scale + score_panel_height + 2 * self.scale  # Minimal gap (2px scaled)
             
             # Draw level number background (small panel above score) - use only text width, not score panel width
             level_panel_width = level_label.texture.size[0] + 40 * self.scale  # Reduced from 60, and no longer matches score panel width
