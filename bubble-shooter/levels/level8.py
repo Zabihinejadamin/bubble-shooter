@@ -16,7 +16,7 @@ class Level8(LevelBase):
         
         # Game settings for Level 8
         # bubble_radius, grid_spacing, grid_start_x, grid_start_y are inherited from LevelBase (scaled for 1080x2424)
-        self.grid_height = 20  # More rows for increased difficulty
+        self.grid_height = 13  # Maximum allowed rows
         
         # Game state for Level 8
         self.max_shots = 12  # Fewer shots for increased difficulty

@@ -16,7 +16,7 @@ class Level2(LevelBase):
         
         # Game settings for Level 2 - more challenging
         # bubble_radius, grid_spacing, grid_start_x, grid_start_y are inherited from LevelBase (scaled for 1080x2424)
-        self.grid_height = 14  # More rows for increased difficulty
+        self.grid_height = 13  # Maximum allowed rows
         
         # Game state for Level 2 - same shots as Level 1
         self.max_shots = 20

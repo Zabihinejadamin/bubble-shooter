@@ -16,7 +16,7 @@ class Level3(LevelBase):
         
         # Game settings for Level 3
         # bubble_radius, grid_spacing, grid_start_x, grid_start_y are inherited from LevelBase (scaled for 1080x2424)
-        self.grid_height = 15  # More rows for increased difficulty
+        self.grid_height = 13  # Maximum allowed rows
         
         # Game state for Level 3
         self.max_shots = 18  # Slightly fewer shots than Level 1
