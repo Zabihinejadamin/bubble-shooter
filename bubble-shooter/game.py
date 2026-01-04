@@ -178,6 +178,7 @@ class BubbleShooterGame(Widget):
         self.max_shots = level_config['max_shots']
         self.shots_remaining = level_config['shots_remaining']
         self.is_loading = False  # Loading state for restart/level transition
+        self.level_just_loaded = False  # Flag to prevent auto-shooting after level load
         
         # Bubbles
         self.grid_bubbles = []  # Bubbles in grid
@@ -238,6 +239,7 @@ class BubbleShooterGame(Widget):
         self.sound_one_bubble = None
         self.sound_two_bubbles = None
         self.sound_four_bubbles = None
+        self.sound_nice_shot = None
         self.load_explosion_sounds()
         
         # Enhanced graphics system
@@ -434,6 +436,12 @@ class BubbleShooterGame(Widget):
             if not self.game_active:
                 return self.handle_game_over_click(touch)
             
+            # Load bubble on first touch if not loaded yet (prevents auto-shooting after level load)
+            if self.current_bubble is None and not self.level_just_loaded:
+                self.load_next_bubble()
+                # Clear the level_just_loaded flag when user actually touches
+                self.level_just_loaded = False
+            
             if self.current_bubble is None:
                 return super().on_touch_down(touch)
             if self.current_bubble.attached:
@@ -472,6 +480,10 @@ class BubbleShooterGame(Widget):
         try:
             # Check if game is over
             if not self.game_active:
+                return super().on_touch_up(touch, *args)
+            
+            # Prevent shooting immediately after level load (fixes auto-shoot bug)
+            if self.level_just_loaded:
                 return super().on_touch_up(touch, *args)
             
             if self.current_bubble is None:
@@ -622,8 +634,15 @@ class BubbleShooterGame(Widget):
         # This ensures positions and sizes are correct
         self.on_size()
         
-        # Load next bubble
-        self.load_next_bubble()
+        # Set flag to prevent auto-shooting immediately after level load
+        self.level_just_loaded = True
+        
+        # Don't load bubble yet - wait for user to touch screen first
+        # This prevents auto-shooting when level loads
+        # self.load_next_bubble()  # Commented out - will load on first touch_down
+        
+        # Clear the flag after a short delay to allow normal gameplay
+        Clock.schedule_once(lambda dt: setattr(self, 'level_just_loaded', False), 0.3)
     
     def next_level(self):
         """Advance to next level"""
@@ -663,9 +682,53 @@ class BubbleShooterGame(Widget):
             from levels.level9 import Level9
             self.current_level = Level9()
         elif current_level_num == 9:
-            # For now, restart Level 9 (can add more levels later)
-            from levels.level9 import Level9
-            self.current_level = Level9()
+            # Advance to Level 10
+            from levels.level10 import Level10
+            self.current_level = Level10()
+        elif current_level_num == 10:
+            # Advance to Level 11
+            from levels.level11 import Level11
+            self.current_level = Level11()
+        elif current_level_num == 11:
+            # Advance to Level 12
+            from levels.level12 import Level12
+            self.current_level = Level12()
+        elif current_level_num == 12:
+            # Advance to Level 13
+            from levels.level13 import Level13
+            self.current_level = Level13()
+        elif current_level_num == 13:
+            # Advance to Level 14
+            from levels.level14 import Level14
+            self.current_level = Level14()
+        elif current_level_num == 14:
+            # Advance to Level 15
+            from levels.level15 import Level15
+            self.current_level = Level15()
+        elif current_level_num == 15:
+            # Advance to Level 16
+            from levels.level16 import Level16
+            self.current_level = Level16()
+        elif current_level_num == 16:
+            # Advance to Level 17
+            from levels.level17 import Level17
+            self.current_level = Level17()
+        elif current_level_num == 17:
+            # Advance to Level 18
+            from levels.level18 import Level18
+            self.current_level = Level18()
+        elif current_level_num == 18:
+            # Advance to Level 19
+            from levels.level19 import Level19
+            self.current_level = Level19()
+        elif current_level_num == 19:
+            # Advance to Level 20
+            from levels.level20 import Level20
+            self.current_level = Level20()
+        elif current_level_num == 20:
+            # For now, restart Level 20 (final level)
+            from levels.level20 import Level20
+            self.current_level = Level20()
         else:
             # Default: restart current level
             pass
@@ -729,7 +792,13 @@ class BubbleShooterGame(Widget):
                     else:
                         # Moving left: start from right side
                         x_pos = self.width + 150
-                    self.airplane = Airplane(x_pos, y_pos, direction, speed=200 * self.scale)
+                    # Fighter speed: 1.5x for levels 10-20, normal for levels 8-9
+                    base_speed = 200 * self.scale
+                    if self.level >= 10:
+                        speed = base_speed * 1.5  # 1.5x speed for levels 10-20
+                    else:
+                        speed = base_speed  # Normal speed for levels 8-9
+                    self.airplane = Airplane(x_pos, y_pos, direction, speed=speed)
             
             # Update airplane
             if self.airplane and self.airplane.active:
@@ -1008,9 +1077,13 @@ class BubbleShooterGame(Widget):
             
             # Calculate score: exploded bubbles * remaining shooting bubbles
             if exploded_count > 0:
-                self.score += exploded_count * self.shots_remaining
+                score_increase = exploded_count * self.shots_remaining
+                self.score += score_increase
                 # Play explosion sound effect
                 self.play_explosion_sound(exploded_count)
+                # Play nice shot sound for big scores (10+ bubbles exploded)
+                if exploded_count >= 10:
+                    self.play_nice_shot_sound()
             
             # Trigger dynamite explosions if any dynamite was found
             if has_dynamite_explosion:
@@ -1067,9 +1140,13 @@ class BubbleShooterGame(Widget):
         
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
-            self.score += exploded_count * self.shots_remaining
+            score_increase = exploded_count * self.shots_remaining
+            self.score += score_increase
             # Play explosion sound effect
             self.play_explosion_sound(exploded_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if exploded_count >= 10:
+                self.play_nice_shot_sound()
         
         # Check for floating bubbles after explosion
         self.check_floating_bubbles()
@@ -1109,9 +1186,13 @@ class BubbleShooterGame(Widget):
         
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
-            self.score += exploded_count * self.shots_remaining
+            score_increase = exploded_count * self.shots_remaining
+            self.score += score_increase
             # Play explosion sound effect
             self.play_explosion_sound(exploded_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if exploded_count >= 10:
+                self.play_nice_shot_sound()
         
         # Check for floating bubbles after explosion
         self.check_floating_bubbles()
@@ -1159,9 +1240,13 @@ class BubbleShooterGame(Widget):
         
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
-            self.score += exploded_count * self.shots_remaining
+            score_increase = exploded_count * self.shots_remaining
+            self.score += score_increase
             # Play explosion sound effect
             self.play_explosion_sound(exploded_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if exploded_count >= 10:
+                self.play_nice_shot_sound()
         
         # Check for floating bubbles after mine explosion
         self.check_floating_bubbles()
@@ -1294,7 +1379,11 @@ class BubbleShooterGame(Widget):
             disconnected_count = len(self.grid_bubbles)
             if disconnected_count > 0:
                 # Calculate score before removing
-                self.score += disconnected_count * self.shots_remaining
+                score_increase = disconnected_count * self.shots_remaining
+                self.score += score_increase
+                # Play nice shot sound for big scores (10+ bubbles exploded)
+                if disconnected_count >= 10:
+                    self.play_nice_shot_sound()
                 # Remove all bubbles immediately
                 self.grid_bubbles.clear()
                 # Print remaining bubbles
@@ -1347,9 +1436,13 @@ class BubbleShooterGame(Widget):
         
         # Calculate score: all disconnected bubbles * remaining shooting bubbles
         if disconnected_count > 0:
-            self.score += disconnected_count * self.shots_remaining
+            score_increase = disconnected_count * self.shots_remaining
+            self.score += score_increase
             # Play explosion sound effect
             self.play_explosion_sound(disconnected_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if disconnected_count >= 10:
+                self.play_nice_shot_sound()
             # Print remaining bubbles after removing disconnected ones
             remaining_count = len(self.grid_bubbles)
             print(f"Remaining bubbles: {remaining_count}")
@@ -1538,8 +1631,9 @@ class BubbleShooterGame(Widget):
                 self.background_music = SoundLoader.load(music_path)
                 if self.background_music:
                     self.background_music.loop = True  # Loop the music
+                    self.background_music.volume = 0.25  # Set volume to 25%
                     self.background_music.play()  # Start playing
-                    print(f"Background music loaded and playing: {music_path}")
+                    print(f"Background music loaded and playing at 25% volume: {music_path}")
                 else:
                     print(f"Failed to load background music: {music_path}")
             except Exception as e:
@@ -1586,6 +1680,26 @@ class BubbleShooterGame(Widget):
                 print(f"Error loading four_bubbles.mp3: {e}")
         else:
             print(f"Sound file not found: four_bubbles.mp3")
+        
+        # Load nice-shot.mp3 (for big scores)
+        nice_shot_path = self.get_asset_path("nice-shot.mp3")
+        if nice_shot_path and os.path.exists(nice_shot_path):
+            try:
+                self.sound_nice_shot = SoundLoader.load(nice_shot_path)
+                if not self.sound_nice_shot:
+                    print(f"Failed to load nice-shot.mp3")
+            except Exception as e:
+                print(f"Error loading nice-shot.mp3: {e}")
+        else:
+            print(f"Sound file not found: nice-shot.mp3")
+    
+    def play_nice_shot_sound(self):
+        """Play nice shot sound for big scores"""
+        try:
+            if self.sound_nice_shot:
+                self.sound_nice_shot.play()
+        except Exception as e:
+            print(f"Error playing nice shot sound: {e}")
     
     def play_explosion_sound(self, count):
         """Play appropriate explosion sound based on bubble count"""
