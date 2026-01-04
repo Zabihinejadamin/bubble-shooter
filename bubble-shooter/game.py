@@ -1475,50 +1475,19 @@ class BubbleShooterGame(Widget):
         return None
     
     def load_background_image(self):
-        """Load background image texture based on level"""
-        # Levels 1-5: Use 10013168.jpg
-        # Levels 6-12: Use 6869202.jpg
-        # Levels 13-20: Use green-abstract-background.jpg
+        """Load background image texture - using first background for all levels"""
+        # For now, use first background (10013168.jpg) for all levels
+        background_filename = "10013168.jpg"
         
-        if self.level >= 13:
-            # Levels 13-20: Use green-abstract-background.jpg
-            background_filename = "green-abstract-background.jpg"
-        elif self.level >= 6:
-            # Levels 6-12: Use 6869202.jpg
-            background_filename = "6869202.jpg"
-        else:
-            # Levels 1-5: Use 10013168.jpg
-            background_filename = "10013168.jpg"
-        
-        # Try multiple paths in order of preference
-        hardcoded_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\{}".format(background_filename)
-        relative_path = self.get_asset_path(background_filename)
-        
-        # Try hardcoded path first (for Windows development)
-        background_path = None
+        # Try hardcoded path first
+        hardcoded_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\10013168.jpg"
         if os.path.exists(hardcoded_path):
             background_path = hardcoded_path
-            print(f"Found background at hardcoded path: {hardcoded_path}")
-        elif relative_path and os.path.exists(relative_path):
-            background_path = relative_path
-            print(f"Found background at relative path: {relative_path}")
         else:
-            # Try all possible paths from get_asset_path
-            possible_paths = [
-                os.path.join("asset", background_filename),
-                os.path.join(".", "asset", background_filename),
-                os.path.join(os.path.dirname(__file__), "asset", background_filename),
-                os.path.join(os.getcwd(), "asset", background_filename),
-            ]
-            if os.name == 'nt':
-                possible_paths.append(hardcoded_path)
-            
-            for path in possible_paths:
-                if path and os.path.exists(path):
-                    background_path = path
-                    print(f"Found background at: {path}")
-                    break
+            # Try relative path as fallback
+            background_path = self.get_asset_path(background_filename)
         
+        # Verify path exists
         if background_path and os.path.exists(background_path):
             try:
                 img = CoreImage(background_path)
@@ -1530,10 +1499,10 @@ class BubbleShooterGame(Widget):
                 traceback.print_exc()
                 self.background_texture = None
         else:
-            print(f"ERROR: Background image not found: {background_filename}")
-            print(f"  Level: {self.level}")
-            print(f"  Tried hardcoded path: {hardcoded_path} (exists: {os.path.exists(hardcoded_path) if hardcoded_path else False})")
-            print(f"  Tried relative path: {relative_path} (exists: {os.path.exists(relative_path) if relative_path else False})")
+            print(f"ERROR: Background image not found for level {self.level}")
+            print(f"  Filename: {background_filename}")
+            print(f"  Path: {background_path}")
+            print(f"  Path exists: {os.path.exists(background_path) if background_path else False}")
             self.background_texture = None
     
     def load_dynamite_image(self):
