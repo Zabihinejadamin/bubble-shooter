@@ -807,6 +807,274 @@ class GraphicsEnhancer:
         
         return self._pil_to_kivy_texture(img)
     
+    def create_helicopter_texture(self, width, height, direction=1):
+        """Create a high-quality helicopter texture with 3D effects and detail"""
+        if not PIL_AVAILABLE:
+            return None
+        
+        # Scale for high quality
+        scale = 3.0
+        tex_width = int(width * scale)
+        tex_height = int(height * scale)
+        
+        img = Image.new('RGBA', (tex_width, tex_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        center_x = tex_width // 2
+        center_y = tex_height // 2
+        
+        # Helicopter body (main cabin) - rounded/oval shape
+        body_width = int(tex_width * 0.45)
+        body_height = int(tex_height * 0.55)
+        body_left = center_x - body_width // 2
+        body_top = center_y - body_height // 2
+        
+        # Draw main cabin with 3D shading (rounded body)
+        for y in range(tex_height):
+            for x in range(tex_width):
+                # Check if in cabin area (elliptical shape)
+                dx = (x - center_x) / (body_width / 2)
+                dy = (y - center_y) / (body_height / 2)
+                dist_squared = dx*dx + dy*dy
+                
+                if dist_squared <= 1.0:
+                    # Calculate 3D position on ellipsoid
+                    nx = dx
+                    ny = dy
+                    z_squared = 1.0 - (dx*dx + dy*dy * 0.7)  # Slightly flattened
+                    if z_squared < 0:
+                        continue
+                    nz = math.sqrt(z_squared)
+                    
+                    # Lighting from top-left
+                    light_dir_x = -0.6
+                    light_dir_y = -0.7
+                    light_dir_z = 0.5
+                    light_len = math.sqrt(light_dir_x**2 + light_dir_y**2 + light_dir_z**2)
+                    light_dir_x /= light_len
+                    light_dir_y /= light_len
+                    light_dir_z /= light_len
+                    
+                    # Lambertian shading
+                    dot_product = nx * light_dir_x + ny * light_dir_y + nz * light_dir_z
+                    dot_product = max(0.0, min(1.0, dot_product))
+                    
+                    ambient = 0.25
+                    diffuse = dot_product * 0.75
+                    brightness = ambient + diffuse
+                    
+                    # Green/military color with lighting
+                    base_r = int(40 * brightness)
+                    base_g = int(120 * brightness)
+                    base_b = int(60 * brightness)
+                    img.putpixel((x, y), (base_r, base_g, base_b, 255))
+        
+        # Draw windows/cockpit (front and side)
+        window_width = int(tex_width * 0.2)
+        window_height = int(tex_height * 0.25)
+        window_x = center_x + body_width // 3 if direction > 0 else center_x - body_width // 3
+        window_y = center_y - body_height // 4
+        
+        # Front window with blue tint
+        window_bbox = [
+            window_x - window_width // 2,
+            window_y - window_height // 2,
+            window_x + window_width // 2,
+            window_y + window_height // 2
+        ]
+        for y in range(tex_height):
+            for x in range(tex_width):
+                dx = x - window_x
+                dy = y - window_y
+                dist = math.sqrt((dx / (window_width / 2))**2 + (dy / (window_height / 2))**2)
+                if dist <= 1.0:
+                    intensity = 1.0 - dist
+                    r = int(60 + intensity * 40)
+                    g = int(100 + intensity * 60)
+                    b = int(160 + intensity * 60)
+                    alpha = int(200 + intensity * 50)
+                    # Blend with existing pixel
+                    existing = img.getpixel((x, y))
+                    if len(existing) == 4:
+                        blend_r = int(existing[0] * 0.3 + r * 0.7)
+                        blend_g = int(existing[1] * 0.3 + g * 0.7)
+                        blend_b = int(existing[2] * 0.3 + b * 0.7)
+                        img.putpixel((x, y), (blend_r, blend_g, blend_b, existing[3]))
+        
+        # Draw tail boom (narrow cylinder extending back)
+        tail_boom_length = int(tex_width * 0.35)
+        tail_boom_width = int(tex_width * 0.08)
+        if direction > 0:
+            tail_start_x = center_x + body_width // 2
+        else:
+            tail_start_x = center_x - body_width // 2
+        tail_boom_y = center_y
+        
+        # Draw tail boom with gradient
+        for y in range(tex_height):
+            for x in range(tex_width):
+                if direction > 0:
+                    if tail_start_x <= x <= tail_start_x + tail_boom_length:
+                        dx = x - tail_start_x
+                    else:
+                        continue
+                else:
+                    if tail_start_x - tail_boom_length <= x <= tail_start_x:
+                        dx = tail_start_x - x
+                    else:
+                        continue
+                
+                dy = y - tail_boom_y
+                dist = abs(dy)
+                
+                if dist <= tail_boom_width // 2:
+                    # Cylindrical shading
+                    nx = 0
+                    ny = dy / (tail_boom_width / 2)
+                    z_squared = 1.0 - (ny*ny)
+                    if z_squared < 0:
+                        continue
+                    nz = math.sqrt(z_squared)
+                    
+                    # Lighting
+                    light_dir_x = -0.6
+                    light_dir_y = -0.7
+                    light_dir_z = 0.5
+                    light_len = math.sqrt(light_dir_x**2 + light_dir_y**2 + light_dir_z**2)
+                    light_dir_x /= light_len
+                    light_dir_y /= light_len
+                    light_dir_z /= light_len
+                    
+                    dot_product = ny * light_dir_y + nz * light_dir_z
+                    dot_product = max(0.0, min(1.0, dot_product))
+                    
+                    brightness = 0.25 + dot_product * 0.75
+                    r = int(35 * brightness)
+                    g = int(110 * brightness)
+                    b = int(55 * brightness)
+                    img.putpixel((x, y), (r, g, b, 255))
+        
+        # Draw main rotor (circular disc on top)
+        rotor_center_x = center_x
+        rotor_center_y = center_y - body_height // 2
+        rotor_radius = int(tex_width * 0.45)
+        rotor_disc_height = int(tex_height * 0.05)
+        
+        # Rotor disc (semi-transparent gray)
+        for y in range(tex_height):
+            for x in range(tex_width):
+                dx = x - rotor_center_x
+                dy = y - rotor_center_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if dist <= rotor_radius and abs(dy) <= rotor_disc_height:
+                    # Rotor disc shading
+                    intensity = 1.0 - (abs(dy) / rotor_disc_height)
+                    gray = int(80 + intensity * 60)
+                    alpha = int(180 + intensity * 60)
+                    img.putpixel((x, y), (gray, gray, gray, alpha))
+        
+        # Draw rotor blades (two main blades)
+        blade_width = int(tex_width * 0.03)
+        blade_length = rotor_radius
+        
+        # Top blade
+        blade_points = [
+            (rotor_center_x - blade_width // 2, rotor_center_y - blade_length),
+            (rotor_center_x + blade_width // 2, rotor_center_y - blade_length),
+            (rotor_center_x + blade_width, rotor_center_y - blade_length * 0.3),
+            (rotor_center_x - blade_width, rotor_center_y - blade_length * 0.3)
+        ]
+        draw.polygon(blade_points, fill=(60, 60, 60, 220))
+        
+        # Bottom blade (opposite side)
+        blade_points_bottom = [
+            (rotor_center_x - blade_width // 2, rotor_center_y + blade_length),
+            (rotor_center_x + blade_width // 2, rotor_center_y + blade_length),
+            (rotor_center_x + blade_width, rotor_center_y + blade_length * 0.3),
+            (rotor_center_x - blade_width, rotor_center_y + blade_length * 0.3)
+        ]
+        draw.polygon(blade_points_bottom, fill=(60, 60, 60, 220))
+        
+        # Draw tail rotor (small circular rotor on tail)
+        if direction > 0:
+            tail_rotor_x = tail_start_x + tail_boom_length - tail_boom_width // 2
+        else:
+            tail_rotor_x = tail_start_x - tail_boom_length + tail_boom_width // 2
+        tail_rotor_y = tail_boom_y
+        tail_rotor_radius = int(tex_width * 0.12)
+        
+        # Tail rotor disc
+        for y in range(tex_height):
+            for x in range(tex_width):
+                dx = x - tail_rotor_x
+                dy = y - tail_rotor_y
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if dist <= tail_rotor_radius:
+                    gray = int(70 + (1.0 - dist/tail_rotor_radius) * 40)
+                    alpha = int(200 + (1.0 - dist/tail_rotor_radius) * 50)
+                    img.putpixel((x, y), (gray, gray, gray, alpha))
+        
+        # Tail rotor blades (small cross pattern)
+        blade_size = tail_rotor_radius * 0.8
+        blade_w = int(tex_width * 0.02)
+        # Horizontal blade
+        draw.rectangle([tail_rotor_x - blade_size, tail_rotor_y - blade_w//2,
+                       tail_rotor_x + blade_size, tail_rotor_y + blade_w//2],
+                      fill=(50, 50, 50, 240))
+        # Vertical blade
+        draw.rectangle([tail_rotor_x - blade_w//2, tail_rotor_y - blade_size,
+                       tail_rotor_x + blade_w//2, tail_rotor_y + blade_size],
+                      fill=(50, 50, 50, 240))
+        
+        # Draw landing skids (two curved skids)
+        skid_height = int(tex_height * 0.15)
+        skid_width = int(tex_width * 0.35)
+        skid_y = center_y + body_height // 2
+        
+        # Left skid
+        left_skid_x = center_x - skid_width // 2
+        skid_points_left = [
+            (left_skid_x, skid_y),
+            (left_skid_x + skid_width * 0.25, skid_y + skid_height),
+            (left_skid_x + skid_width * 0.4, skid_y + skid_height),
+            (left_skid_x + skid_width * 0.15, skid_y)
+        ]
+        draw.polygon(skid_points_left, fill=(80, 80, 80, 255))
+        
+        # Right skid
+        right_skid_x = center_x + skid_width // 2
+        skid_points_right = [
+            (right_skid_x, skid_y),
+            (right_skid_x - skid_width * 0.25, skid_y + skid_height),
+            (right_skid_x - skid_width * 0.4, skid_y + skid_height),
+            (right_skid_x - skid_width * 0.15, skid_y)
+        ]
+        draw.polygon(skid_points_right, fill=(80, 80, 80, 255))
+        
+        # Add body highlights and details
+        # Top highlight (reflection from main rotor area)
+        highlight_y = center_y - body_height // 2 + int(tex_height * 0.08)
+        for y in range(tex_height):
+            for x in range(tex_width):
+                dx = (x - center_x) / (body_width / 2)
+                dy = (y - center_y) / (body_height / 2)
+                dist_squared = dx*dx + dy*dy
+                
+                if dist_squared <= 1.0 and y < highlight_y:
+                    # Add highlight
+                    existing = img.getpixel((x, y))
+                    if len(existing) == 4:
+                        highlight_intensity = (highlight_y - y) / (tex_height * 0.08)
+                        highlight_intensity = min(1.0, highlight_intensity)
+                        new_r = min(255, existing[0] + int(30 * highlight_intensity))
+                        new_g = min(255, existing[1] + int(40 * highlight_intensity))
+                        new_b = min(255, existing[2] + int(20 * highlight_intensity))
+                        img.putpixel((x, y), (new_r, new_g, new_b, existing[3]))
+        
+        return self._pil_to_kivy_texture(img)
+    
     def _pil_to_kivy_texture(self, pil_image):
         """Convert PIL Image to Kivy Texture"""
         # Convert PIL image to bytes

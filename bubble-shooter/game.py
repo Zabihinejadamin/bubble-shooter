@@ -87,6 +87,53 @@ class Airplane:
                 bubble_top >= airplane_bottom and bubble_bottom <= airplane_top)
 
 
+class Helicopter:
+    """Represents a helicopter that crosses the screen"""
+    
+    def __init__(self, x, y, direction=1, speed=200):
+        self.x = x
+        self.y = y
+        self.direction = direction  # 1 for right, -1 for left
+        self.speed = speed
+        self.width = 320  # Helicopter width (doubled from 160)
+        self.height = 160  # Helicopter height (doubled from 80)
+        self.active = True
+        self.exploded = False
+    
+    def update(self, dt, screen_width):
+        """Update helicopter position"""
+        if not self.active or self.exploded:
+            return
+        
+        # Move helicopter (direction: 1 = right, -1 = left)
+        self.x += self.direction * self.speed * dt
+        
+        # Check if helicopter has left the screen
+        if self.direction > 0 and self.x > screen_width + self.width:
+            self.active = False
+        elif self.direction < 0 and self.x < -self.width:
+            self.active = False
+    
+    def check_collision(self, bubble):
+        """Check if a bubble collides with the helicopter"""
+        if not self.active or self.exploded:
+            return False
+        
+        # Simple rectangle collision
+        bubble_left = bubble.x - bubble.radius
+        bubble_right = bubble.x + bubble.radius
+        bubble_top = bubble.y + bubble.radius
+        bubble_bottom = bubble.y - bubble.radius
+        
+        helicopter_left = self.x - self.width / 2
+        helicopter_right = self.x + self.width / 2
+        helicopter_top = self.y + self.height / 2
+        helicopter_bottom = self.y - self.height / 2
+        
+        return (bubble_right >= helicopter_left and bubble_left <= helicopter_right and
+                bubble_top >= helicopter_bottom and bubble_bottom <= helicopter_top)
+
+
 class Bubble:
     """Represents a single bubble"""
     
@@ -231,6 +278,10 @@ class BubbleShooterGame(Widget):
         self.jet_texture = None
         self.load_jet_image()
         
+        # Helicopter image
+        self.helicopter_texture = None
+        self.load_helicopter_image()
+        
         # Background music
         self.background_music = None
         self.load_background_music()
@@ -258,6 +309,11 @@ class BubbleShooterGame(Widget):
         self.airplane_spawn_timer = 0
         self.airplane_spawn_interval = random.uniform(2.0, 5.0)  # Random spawn interval (2-5 seconds) - faster for testing
         self.airplane_texture = None  # Cache for airplane texture
+        
+        # Helicopter (for levels >= 10)
+        self.helicopter = None
+        self.helicopter_spawn_timer = 0
+        self.helicopter_spawn_interval = random.uniform(3.0, 6.0)  # Random spawn interval (3-6 seconds)
         
         # Call on_size immediately and also after a short delay to ensure window size is set
         # This ensures scaling works even if window size is already available
@@ -627,6 +683,11 @@ class BubbleShooterGame(Widget):
         self.current_bubble = None
         self.next_bubble = None
         
+        # Reset helicopter
+        self.helicopter = None
+        self.helicopter_spawn_timer = 0
+        self.helicopter_spawn_interval = random.uniform(3.0, 6.0)
+        
         # Reload background image for the new level (if level changed)
         self.load_background_image()
         
@@ -813,6 +874,53 @@ class BubbleShooterGame(Widget):
                         self.shot_bubbles.remove(bubble)
                         break
         
+        # Update helicopter (for levels >= 10)
+        if self.level >= 10:
+            # Spawn helicopter if needed
+            if self.helicopter is None or not self.helicopter.active:
+                self.helicopter_spawn_timer += dt
+                if self.helicopter_spawn_timer >= self.helicopter_spawn_interval:
+                    self.helicopter_spawn_timer = 0
+                    # Set next random spawn interval
+                    self.helicopter_spawn_interval = random.uniform(3.0, 6.0)
+                    
+                    # Randomly choose direction (left or right)
+                    direction = random.choice([-1, 1])
+                    # Calculate minimum Y value (1200 in base resolution, scaled)
+                    min_y_base = 1200
+                    min_y_scaled = min_y_base * (self.height / self.base_height) if self.height > 0 else min_y_base
+                    # Randomly choose Y position (minimum 1200, up to 85% of screen height)
+                    max_y = self.height * 0.85
+                    y_pos = min_y_scaled + random.random() * (max_y - min_y_scaled)
+                    if direction > 0:
+                        # Moving right: start from left side
+                        x_pos = -150
+                    else:
+                        # Moving left: start from right side
+                        x_pos = self.width + 150
+                    # Helicopter speed: gradually increases from 1x at level 10 to 2x at level 20
+                    base_speed = 200 * self.scale
+                    if self.level >= 10:
+                        # Calculate speed multiplier: 1.0 at level 10, 2.0 at level 20
+                        speed_multiplier = 1.0 + (self.level - 10) * 0.1
+                        speed = base_speed * speed_multiplier
+                    else:
+                        speed = base_speed
+                    self.helicopter = Helicopter(x_pos, y_pos, direction, speed=speed)
+            
+            # Update helicopter
+            if self.helicopter and self.helicopter.active:
+                self.helicopter.update(dt, self.width)
+                
+                # Check collision with shot bubbles
+                for bubble in self.shot_bubbles[:]:
+                    if self.helicopter.check_collision(bubble):
+                        # Helicopter hit! Explode it
+                        self.explode_helicopter(self.helicopter.x, self.helicopter.y)
+                        # Remove the bubble that hit it
+                        self.shot_bubbles.remove(bubble)
+                        break
+        
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
             bubble.update(dt)
@@ -872,6 +980,7 @@ class BubbleShooterGame(Widget):
             self.draw_grid()
             self.draw_shot_bubbles()
             self.draw_airplane()  # Draw airplane
+            self.draw_helicopter()  # Draw helicopter
             self.draw_shooter()
             self.draw_particles()  # Draw particles on top
             self.draw_ui()
@@ -1183,6 +1292,64 @@ class BubbleShooterGame(Widget):
         for bubble in bubbles_to_remove:
             if bubble in self.grid_bubbles:
                 self.grid_bubbles.remove(bubble)
+        
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            score_increase = exploded_count * self.shots_remaining
+            self.score += score_increase
+            # Play explosion sound effect
+            self.play_explosion_sound(exploded_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if exploded_count >= 10:
+                self.play_nice_shot_sound()
+        
+        # Check for floating bubbles after explosion
+        self.check_floating_bubbles()
+        
+        # Check if all bubbles are cleared (win condition)
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
+    
+    def explode_helicopter(self, x, y):
+        """Explode helicopter and remove all bubbles in the same horizontal line"""
+        if self.helicopter:
+            self.helicopter.exploded = True
+            self.helicopter.active = False
+        
+        # Create large explosion particles
+        self.create_explosion_particles(x, y, (0.0, 1.0, 0.5), particle_count=30, speed_multiplier=2.0)
+        
+        # Find the row (y coordinate) of the helicopter
+        helicopter_y = y
+        
+        # Tolerance for determining if bubbles are in the same row
+        # Account for hexagonal grid where rows are spaced by grid_spacing * 0.866
+        # Use half the row spacing as tolerance
+        row_tolerance = self.grid_spacing * 0.4  # Allow tolerance for row detection
+        
+        bubbles_to_explode = []
+        dynamite_to_trigger = []
+        
+        for bubble in self.grid_bubbles[:]:
+            # Check if bubble is in the same row (within tolerance)
+            if abs(bubble.y - helicopter_y) <= row_tolerance:
+                bubbles_to_explode.append(bubble)
+                # Check if this bubble has dynamite (will trigger after removal)
+                if bubble.has_dynamite:
+                    dynamite_to_trigger.append((bubble.x, bubble.y))
+        
+        # Remove all bubbles in the same row
+        exploded_count = 0
+        for bubble in bubbles_to_explode:
+            if bubble in self.grid_bubbles:
+                # Create particle effect for this bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
+                self.grid_bubbles.remove(bubble)
+                exploded_count += 1
+        
+        # Trigger dynamite explosions after removing bubbles (to avoid double processing)
+        for dx, dy in dynamite_to_trigger:
+            self.trigger_dynamite_explosion(dx, dy)
         
         # Calculate score: exploded bubbles * remaining shooting bubbles
         if exploded_count > 0:
@@ -1616,6 +1783,62 @@ class BubbleShooterGame(Widget):
         else:
             print(f"Jet image not found: {jet_path}")
             self.jet_texture = None
+    
+    def load_helicopter_image(self):
+        """Load helicopter image texture with white background removed"""
+        # Use the specified helicopter image
+        helicopter_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\helicopter_apache.jpg"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(helicopter_path):
+            helicopter_path = self.get_asset_path("helicopter_apache.jpg")
+        
+        if helicopter_path and os.path.exists(helicopter_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(helicopter_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+                    
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+                    
+                    pil_img.putdata(new_data)
+                    
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.helicopter_texture = img.texture
+                    print(f"Helicopter image loaded with background removed: {helicopter_path}")
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(helicopter_path)
+                    self.helicopter_texture = img.texture
+                    print(f"Helicopter image loaded (PIL not available): {helicopter_path}")
+            except Exception as e:
+                print(f"Error loading helicopter image: {e}")
+                import traceback
+                traceback.print_exc()
+                self.helicopter_texture = None
+        else:
+            print(f"Helicopter image not found: {helicopter_path}")
+            self.helicopter_texture = None
     
     def load_background_music(self):
         """Load and play background music"""
@@ -2146,6 +2369,105 @@ class BubbleShooterGame(Widget):
         Color(0.4, 0.6, 0.8, 0.8)  # Blue tinted canopy
         Ellipse(pos=(canopy_x - canopy_width/2, canopy_y - canopy_height/2),
                size=(canopy_width, canopy_height))
+    
+    def draw_helicopter(self):
+        """Draw the helicopter if it's active using image texture"""
+        if not self.helicopter or not self.helicopter.active:
+            return
+        
+        x = self.helicopter.x
+        y = self.helicopter.y
+        width = self.helicopter.width * self.scale
+        height = self.helicopter.height * self.scale
+        
+        # Use helicopter image if available
+        if self.helicopter_texture:
+            Color(1, 1, 1, 1)
+            # Mirror horizontally if moving left (using negative width)
+            if self.helicopter.direction < 0:
+                # For left direction, mirror by using negative width
+                Rectangle(texture=self.helicopter_texture, 
+                         pos=(x + width/2, y - height/2),
+                         size=(-width, height))
+            else:
+                # Normal direction (right)
+                Rectangle(texture=self.helicopter_texture, 
+                         pos=(x - width/2, y - height/2),
+                         size=(width, height))
+            return
+        
+        # Fallback to enhanced graphics if image not available
+        use_enhanced = (self.graphics_enhancer is not None and 
+                       GRAPHICS_ENHANCER_AVAILABLE and PIL_AVAILABLE)
+        
+        if use_enhanced:
+            # Generate or get cached helicopter texture (always generate facing right, mirror at render)
+            cache_key = f"helicopter_{int(width)}_{int(height)}"
+            helicopter_texture = self.bazooka_textures.get(cache_key)
+            
+            if helicopter_texture is None:
+                # Always generate texture facing right (direction=1)
+                helicopter_texture = self.graphics_enhancer.create_helicopter_texture(
+                    width, height, direction=1
+                )
+                if helicopter_texture:
+                    self.bazooka_textures[cache_key] = helicopter_texture
+            
+            if helicopter_texture:
+                Color(1, 1, 1, 1)
+                # Flip helicopter horizontally only (use negative width)
+                Rectangle(texture=helicopter_texture, 
+                         pos=(x + width/2, y - height/2),
+                         size=(-width, height))
+                return
+        
+        # Fallback to basic drawing if enhanced graphics not available
+        # Draw helicopter body (main cabin)
+        Color(0.2, 0.5, 0.2, 1)  # Green color
+        body_width = width * 0.5
+        body_height = height * 0.6
+        Rectangle(pos=(x - body_width/2, y - body_height/2), 
+                 size=(body_width, body_height))
+        
+        # Draw main rotor (top)
+        rotor_radius = width * 0.4
+        Color(0.3, 0.3, 0.3, 1)  # Dark gray
+        Ellipse(pos=(x - rotor_radius, y + body_height/2 - rotor_radius * 0.2), 
+               size=(rotor_radius * 2, rotor_radius * 0.4))
+        # Rotor blades (simple lines)
+        Color(0.4, 0.4, 0.4, 1)
+        Line(points=[x - rotor_radius * 1.5, y + body_height/2, 
+                     x + rotor_radius * 1.5, y + body_height/2], width=3)
+        
+        # Draw tail rotor (small circle on the back)
+        tail_rotor_size = width * 0.15
+        tail_x = x + body_width/2 if self.helicopter.direction > 0 else x - body_width/2
+        Color(0.3, 0.3, 0.3, 1)
+        Ellipse(pos=(tail_x - tail_rotor_size/2, y), 
+               size=(tail_rotor_size, tail_rotor_size))
+        
+        # Draw tail boom
+        tail_length = width * 0.3
+        Color(0.25, 0.45, 0.25, 1)  # Slightly darker green
+        if self.helicopter.direction > 0:
+            Rectangle(pos=(x + body_width/2, y - body_height * 0.1), 
+                     size=(tail_length, body_height * 0.2))
+        else:
+            Rectangle(pos=(x - body_width/2 - tail_length, y - body_height * 0.1), 
+                     size=(tail_length, body_height * 0.2))
+        
+        # Draw landing skids
+        skid_width = body_width * 0.8
+        skid_height = height * 0.15
+        Color(0.4, 0.4, 0.4, 1)  # Gray
+        # Left skid
+        Line(points=[x - skid_width/2, y - body_height/2 - skid_height,
+                     x - skid_width/2, y - body_height/2,
+                     x - skid_width/2 + skid_width * 0.3, y - body_height/2], width=2)
+        # Right skid
+        Line(points=[x + skid_width/2, y - body_height/2 - skid_height,
+                     x + skid_width/2, y - body_height/2,
+                     x + skid_width/2 - skid_width * 0.3, y - body_height/2], width=2)
     
     def draw_shooter(self):
         """Draw bazooka-style shooter with laser aim"""
