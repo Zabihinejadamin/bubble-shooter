@@ -181,6 +181,50 @@ class Warship:
                 bubble_top >= warship_bottom and bubble_bottom <= warship_top)
 
 
+class Balloon:
+    """Represents a balloon that drops from the top"""
+
+    def __init__(self, x, y, speed=100):
+        self.x = x
+        self.y = y
+        self.speed = speed
+        self.width = 150  # Balloon width
+        self.height = 200  # Balloon height (taller than wide)
+        self.active = True
+        self.exploded = False
+
+    def update(self, dt, screen_height):
+        """Update balloon position"""
+        if not self.active or self.exploded:
+            return
+
+        # Move balloon downward
+        self.y -= self.speed * dt
+
+        # Check if balloon has left the screen (bottom)
+        if self.y < -self.height:
+            self.active = False
+
+    def check_collision(self, bubble):
+        """Check if a bubble collides with the balloon"""
+        if not self.active or self.exploded:
+            return False
+
+        # Simple rectangle collision
+        bubble_left = bubble.x - bubble.radius
+        bubble_right = bubble.x + bubble.radius
+        bubble_top = bubble.y + bubble.radius
+        bubble_bottom = bubble.y - bubble.radius
+
+        balloon_left = self.x - self.width / 2
+        balloon_right = self.x + self.width / 2
+        balloon_top = self.y + self.height / 2
+        balloon_bottom = self.y - self.height / 2
+
+        return (bubble_right >= balloon_left and bubble_left <= balloon_right and
+                bubble_top >= balloon_bottom and bubble_bottom <= balloon_top)
+
+
 class Bubble:
     """Represents a single bubble"""
     
@@ -370,6 +414,12 @@ class BubbleShooterGame(Widget):
         self.warship_spawn_timer = 0
         self.warship_spawn_interval = random.uniform(4.0, 8.0)  # Random spawn interval (4-8 seconds)
         self.warship_texture = None  # Cache for warship texture
+
+        # Balloon (for levels > 30, but testing in level 1)
+        self.balloon = None
+        self.balloon_spawn_timer = 0
+        self.balloon_spawn_interval = random.uniform(5.0, 10.0)  # Random spawn interval (5-10 seconds)
+        self.balloon_texture = None  # Cache for balloon texture
         
         # Call on_size immediately and also after a short delay to ensure window size is set
         # This ensures scaling works even if window size is already available
@@ -749,6 +799,11 @@ class BubbleShooterGame(Widget):
         self.warship_spawn_timer = 0
         self.warship_spawn_interval = random.uniform(4.0, 8.0)
 
+        # Reset balloon
+        self.balloon = None
+        self.balloon_spawn_timer = 0
+        self.balloon_spawn_interval = random.uniform(5.0, 10.0)
+
         # Reload background image for the new level (if level changed)
         self.load_background_image()
         
@@ -1069,6 +1124,43 @@ class BubbleShooterGame(Widget):
                         self.shot_bubbles.remove(bubble)
                         break
 
+        # Update balloon (for levels > 30, but testing in level 1)
+        if self.level >= 1:  # Changed from > 30 for testing
+            # Spawn balloon if needed
+            if self.balloon is None or not self.balloon.active:
+                self.balloon_spawn_timer += dt
+                if self.balloon_spawn_timer >= self.balloon_spawn_interval:
+                    self.balloon_spawn_timer = 0
+                    # Set next random spawn interval
+                    self.balloon_spawn_interval = random.uniform(5.0, 10.0)
+
+                    # Randomly choose X position (across the top of screen)
+                    x_pos = random.randint(int(self.width * 0.1), int(self.width * 0.9))
+                    # Start from top of screen
+                    y_pos = self.height + 100
+                    # Balloon speed: moderate falling speed
+                    base_speed = 120 * self.scale
+                    if self.level >= 35:
+                        # Calculate speed multiplier: 1.0 at level 35, 1.5 at level 40
+                        speed_multiplier = 1.0 + (self.level - 35) * 0.1
+                        speed = base_speed * speed_multiplier
+                    else:
+                        speed = base_speed
+                    self.balloon = Balloon(x_pos, y_pos, speed=speed)
+
+            # Update balloon
+            if self.balloon and self.balloon.active:
+                self.balloon.update(dt, self.height)
+
+                # Check collision with shot bubbles
+                for bubble in self.shot_bubbles[:]:
+                    if self.balloon.check_collision(bubble):
+                        # Balloon hit! Explode it
+                        self.explode_balloon(self.balloon.x, self.balloon.y)
+                        # Remove the bubble that hit it
+                        self.shot_bubbles.remove(bubble)
+                        break
+
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
             bubble.update(dt)
@@ -1130,6 +1222,7 @@ class BubbleShooterGame(Widget):
             self.draw_airplane()  # Draw airplane
             self.draw_helicopter()  # Draw helicopter
             self.draw_warship()  # Draw warship
+            self.draw_balloon()  # Draw balloon
             self.draw_shooter()
             self.draw_particles()  # Draw particles on top
             self.draw_ui()
@@ -1442,6 +1535,61 @@ class BubbleShooterGame(Widget):
                     dynamite_to_trigger.append((bubble.x, bubble.y))
 
         # Remove all bubbles in the same horizontal line
+        exploded_count = 0
+        for bubble in bubbles_to_explode:
+            if bubble in self.grid_bubbles:
+                # Create particle effect for this bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
+                self.grid_bubbles.remove(bubble)
+                exploded_count += 1
+
+        # Trigger dynamite explosions after removing bubbles (to avoid double processing)
+        for dx, dy in dynamite_to_trigger:
+            self.trigger_dynamite_explosion(dx, dy)
+
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            score_increase = exploded_count * self.shots_remaining
+            self.score += score_increase
+            # Play explosion sound effect
+            self.play_explosion_sound(exploded_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if exploded_count >= 10:
+                self.play_nice_shot_sound()
+
+        # Check for floating bubbles after explosion
+        self.check_floating_bubbles()
+
+        # Check if all bubbles are cleared (win condition)
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
+
+    def explode_balloon(self, x, y):
+        """Explode balloon and remove all bubbles within radius of 2 balloons"""
+        if self.balloon:
+            self.balloon.exploded = True
+            self.balloon.active = False
+
+        # Create large explosion particles
+        self.create_explosion_particles(x, y, (1.0, 0.5, 1.0), particle_count=50, speed_multiplier=3.0)
+
+        # Find and remove all bubbles within radius of 2 balloons
+        explosion_radius = 2 * self.grid_spacing  # Radius of 2 bubbles in grid units, converted to pixels
+        bubbles_to_explode = []
+        dynamite_to_trigger = []
+
+        for bubble in self.grid_bubbles[:]:
+            dx = bubble.x - x
+            dy = bubble.y - y
+            distance = math.sqrt(dx * dx + dy * dy)
+
+            if distance <= explosion_radius:
+                bubbles_to_explode.append(bubble)
+                # Check if this bubble has dynamite (will trigger after removal)
+                if bubble.has_dynamite:
+                    dynamite_to_trigger.append((bubble.x, bubble.y))
+
+        # Remove bubbles and add score
         exploded_count = 0
         for bubble in bubbles_to_explode:
             if bubble in self.grid_bubbles:
@@ -2097,6 +2245,57 @@ class BubbleShooterGame(Widget):
                 self.warship_texture = None
         else:
             self.warship_texture = None
+
+    def load_balloon_image(self):
+        """Load balloon image texture with white background removed"""
+        # Use the specified balloon image
+        balloon_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\balloon.jpg"
+
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(balloon_path):
+            balloon_path = self.get_asset_path("balloon.jpg")
+
+        if balloon_path and os.path.exists(balloon_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(balloon_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+
+                    pil_img.putdata(new_data)
+
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.balloon_texture = img.texture
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(balloon_path)
+                    self.balloon_texture = img.texture
+            except Exception as e:
+                print(f"Error loading balloon image: {e}")
+                self.balloon_texture = None
+        else:
+            self.balloon_texture = None
 
     def load_background_music(self):
         """Load and play background music"""
@@ -2792,6 +2991,48 @@ class BubbleShooterGame(Widget):
             bow_points = [(x - width/2, y), (x - width/2 + width*0.1, y - height/2),
                          (x - width/2 + width*0.1, y + height/2)]
             Triangle(points=[coord for point in bow_points for coord in point])
+
+    def draw_balloon(self):
+        """Draw the balloon if it's active using image texture"""
+        if not self.balloon or not self.balloon.active:
+            return
+
+        x = self.balloon.x
+        y = self.balloon.y
+        width = self.balloon.width * self.scale
+        height = self.balloon.height * self.scale
+
+        # Load texture lazily if not already loaded
+        if self.balloon_texture is None:
+            self.load_balloon_image()
+
+        # Use balloon image if available
+        if self.balloon_texture:
+            Color(1, 1, 1, 1)
+            Rectangle(texture=self.balloon_texture,
+                     pos=(x - width/2, y - height/2),
+                     size=(width, height))
+            return
+
+        # Basic fallback drawing if image not available
+        # Draw balloon body (oval shape)
+        Color(1.0, 0.8, 0.8, 1)  # Light pink/red
+        # Main balloon body (ellipse)
+        Ellipse(pos=(x - width/2, y - height/2), size=(width, height))
+
+        # Draw balloon basket (below the balloon)
+        basket_width = width * 0.6
+        basket_height = height * 0.2
+        Color(0.6, 0.3, 0.1, 1)  # Brown
+        Rectangle(pos=(x - basket_width/2, y - height/2 - basket_height),
+                 size=(basket_width, basket_height))
+
+        # Draw balloon strings
+        Color(0.8, 0.8, 0.8, 1)  # Light gray
+        Line(points=[x - basket_width/3, y - height/2,
+                    x - basket_width/3, y - height/2 - basket_height], width=2)
+        Line(points=[x + basket_width/3, y - height/2,
+                    x + basket_width/3, y - height/2 - basket_height], width=2)
 
     def draw_shooter(self):
         """Draw bazooka-style shooter with laser aim"""
