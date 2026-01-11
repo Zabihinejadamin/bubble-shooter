@@ -12,7 +12,8 @@ export ANDROIDNDK=/home/aminz/.buildozer/android/platform/android-ndk-r25b
 export ANDROIDAPI=35
 
 # Add local bin and buildozer env bin to PATH so Cython can be found
-export PATH="$HOME/.local/bin:/home/aminz/buildozer_env/bin:$PATH"
+# Also include system paths for git and other tools
+export PATH="$HOME/.local/bin:/home/aminz/buildozer_env/bin:/usr/bin:/usr/local/bin:$PATH"
 
 echo "Building APK with:"
 echo "  NDK: $ANDROIDNDK"
@@ -38,5 +39,5 @@ if ! command -v cython &> /dev/null; then
 fi
 
 # Run buildozer with explicit environment
-env ANDROIDNDK=/home/aminz/.buildozer/android/platform/android-ndk-r25b ANDROIDAPI=35 PATH="$HOME/.local/bin:/home/aminz/buildozer_env/bin:$PATH" /home/aminz/buildozer_env/bin/buildozer android debug
+env ANDROIDNDK=/home/aminz/.buildozer/android/platform/android-ndk-r25b ANDROIDAPI=35 PATH="$HOME/.local/bin:/home/aminz/buildozer_env/bin:/usr/bin:/usr/local/bin:$PATH" /home/aminz/buildozer_env/bin/buildozer android debug
 
