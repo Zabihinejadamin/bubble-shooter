@@ -355,6 +355,9 @@ class Bubble:
         self.has_mine = False  # Does this bubble contain a mine?
         self.has_golden = False  # Is this a golden bubble? (extra score when shot directly)
         self.is_rock = False  # Is this a rock? (doesn't explode, falls when hit)
+        self.has_diamond = False  # Does this rock contain a diamond?
+        self.showing_diamond = False  # Is this rock currently showing the diamond?
+        self.diamond_show_timer = 0.0  # Timer for how long to show the diamond (seconds)
         self.falling = False  # Is bubble falling (disconnected from top)?
         self.gravity = 300  # Gravity acceleration for falling bubbles
     
@@ -431,6 +434,7 @@ class BubbleShooterGame(Widget):
         self.game_active = True
         self.max_shots = level_config['max_shots']
         self.shots_remaining = level_config['shots_remaining']
+        self.diamond_storage = 0  # Number of diamonds collected
         self.is_loading = False  # Loading state for restart/level transition
         self.level_just_loaded = False  # Flag to prevent auto-shooting after level load
         
@@ -501,6 +505,10 @@ class BubbleShooterGame(Widget):
         # Rock image
         self.rock_texture = None
         self.load_rock_image()
+
+        # Diamond image
+        self.diamond_texture = None
+        self.load_diamond_image()
 
         # Background music
         self.background_music = None
@@ -765,8 +773,19 @@ class BubbleShooterGame(Widget):
                 rocks_to_assign = random.sample(available_bubbles, num_rocks)
                 for bubble in rocks_to_assign:
                     bubble.is_rock = True
-                # Debug: print number of rocks assigned
-                print(f"Assigned {len(rocks_to_assign)} rocks in level {self.level}")
+                
+                # Assign diamonds to 20-50% of rocks randomly
+                diamond_chance = random.uniform(0.2, 0.5)  # 20-50% chance
+                num_diamonds = max(1, int(len(rocks_to_assign) * diamond_chance))  # At least 1 if any rocks
+                num_diamonds = min(num_diamonds, len(rocks_to_assign))  # Don't exceed number of rocks
+                
+                # Randomly select rocks to contain diamonds
+                diamonds_to_assign = random.sample(rocks_to_assign, num_diamonds)
+                for bubble in diamonds_to_assign:
+                    bubble.has_diamond = True
+                
+                # Debug: print number of rocks and diamonds assigned
+                print(f"Assigned {len(rocks_to_assign)} rocks in level {self.level}, {len(diamonds_to_assign)} with diamonds")
     
     def load_next_bubble(self):
         """Load next bubble to shoot"""
@@ -1215,11 +1234,41 @@ class BubbleShooterGame(Widget):
                 self.draw_ui()
             return
         
-        # Update falling bubbles (rocks)
+        # Update grid bubbles - check for diamonds showing
+        for grid_bubble in self.grid_bubbles[:]:
+            if grid_bubble.is_rock and grid_bubble.showing_diamond:
+                # Update diamond show timer
+                grid_bubble.diamond_show_timer -= dt
+                if grid_bubble.diamond_show_timer <= 0:
+                    # Timer expired - make diamond fall
+                    # ALWAYS ensure has_diamond flag is set when showing_diamond is True
+                    grid_bubble.has_diamond = True  # Force set it to be absolutely sure
+                    grid_bubble.attached = False
+                    grid_bubble.falling = True
+                    grid_bubble.vy = 0  # Start falling from rest
+                    # Remove from grid and add to falling bubbles
+                    self.grid_bubbles.remove(grid_bubble)
+                    self.falling_bubbles.append(grid_bubble)
+                    print(f"Diamond started falling (has_diamond={grid_bubble.has_diamond}, showing_diamond={grid_bubble.showing_diamond})")
+        
+        # Update falling bubbles (rocks and diamonds)
         for bubble in self.falling_bubbles[:]:
             bubble.update(dt)
             # Remove if off screen
             if bubble.y + bubble.radius < 0:
+                # Check if it's a diamond - check both flags to be safe
+                is_diamond = False
+                if hasattr(bubble, 'has_diamond') and bubble.has_diamond:
+                    is_diamond = True
+                elif hasattr(bubble, 'showing_diamond') and bubble.showing_diamond:
+                    is_diamond = True
+                    # Also set has_diamond for consistency
+                    bubble.has_diamond = True
+                
+                if is_diamond:
+                    # Add diamond to storage
+                    self.diamond_storage += 1
+                    print(f"Diamond collected! Storage: {self.diamond_storage} (has_diamond={getattr(bubble, 'has_diamond', False)}, showing_diamond={getattr(bubble, 'showing_diamond', False)})")
                 self.falling_bubbles.remove(bubble)
         
         # Update particles
@@ -1502,17 +1551,27 @@ class BubbleShooterGame(Widget):
             if closest_bubble:
                 # Check if the grid bubble is a rock
                 if closest_bubble.is_rock:
-                    # Rock doesn't explode - make it fall
-                    closest_bubble.attached = False
-                    closest_bubble.falling = True
-                    closest_bubble.vy = 0  # Start falling from rest
-                    # Remove the rock from grid and add to falling bubbles
-                    self.grid_bubbles.remove(closest_bubble)
-                    self.falling_bubbles.append(closest_bubble)
+                    # Check if rock contains a diamond
+                    if closest_bubble.has_diamond:
+                        # Diamond found! Show diamond for a couple seconds before it falls
+                        closest_bubble.showing_diamond = True
+                        closest_bubble.diamond_show_timer = 2.0  # Show for 2 seconds
+                        # Create special diamond particles (sparkly effect)
+                        self.create_explosion_particles(closest_bubble.x, closest_bubble.y, (0.8, 0.9, 1.0), particle_count=20, speed_multiplier=1.2)
+                        print(f"Diamond revealed! It will drop and be added to storage.")
+                    else:
+                        # Regular rock - make it fall immediately
+                        closest_bubble.attached = False
+                        closest_bubble.falling = True
+                        closest_bubble.vy = 0  # Start falling from rest
+                        # Remove the rock from grid and add to falling bubbles
+                        self.grid_bubbles.remove(closest_bubble)
+                        self.falling_bubbles.append(closest_bubble)
+                        # Create small impact particles
+                        self.create_explosion_particles(closest_bubble.x, closest_bubble.y, (0.5, 0.5, 0.5), particle_count=10, speed_multiplier=0.8)
+                    
                     # Remove shot bubble
                     self.shot_bubbles.remove(bubble)
-                    # Create small impact particles
-                    self.create_explosion_particles(closest_bubble.x, closest_bubble.y, (0.5, 0.5, 0.5), particle_count=10, speed_multiplier=0.8)
                 else:
                     # Normal bubble - attach as usual
                     self.attach_bubble(bubble, closest_bubble)
@@ -2508,6 +2567,59 @@ class BubbleShooterGame(Widget):
             print(f"Rock image not found: {rock_path}")
             self.rock_texture = None
     
+    def load_diamond_image(self):
+        """Load diamond image texture with white background removed"""
+        # Use the specified diamond image
+        diamond_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\diamond.jpg"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(diamond_path):
+            diamond_path = self.get_asset_path("diamond.jpg")
+        
+        if diamond_path and os.path.exists(diamond_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(diamond_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+                    
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+                    
+                    pil_img.putdata(new_data)
+                    
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.diamond_texture = img.texture
+                    print(f"Successfully loaded diamond image: {diamond_path}")
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(diamond_path)
+                    self.diamond_texture = img.texture
+            except Exception as e:
+                print(f"Error loading diamond image: {e}")
+                self.diamond_texture = None
+        else:
+            print(f"Diamond image not found: {diamond_path}")
+            self.diamond_texture = None
+    
     def load_jet_image(self):
         """Load fighter jet image texture"""
         # Use the specified jet image
@@ -2912,27 +3024,72 @@ class BubbleShooterGame(Widget):
         
         # Special drawing for rocks - use rock image if available
         if bubble.is_rock:
-            # Load texture lazily if not already loaded
-            if self.rock_texture is None:
-                self.load_rock_image()
-            
-            # Use rock image if available
-            if self.rock_texture:
-                # Draw rock image centered on bubble
-                rock_size = radius * 2  # Size to match bubble size
-                Color(1, 1, 1, 1)  # Full color (no tinting)
-                Rectangle(texture=self.rock_texture,
-                         pos=(x - rock_size / 2, y - rock_size / 2),
-                         size=(rock_size, rock_size))
-            else:
-                # Fallback: draw dark stone appearance if image not available
-                # Outer dark border for visibility
-                Color(0.1, 0.1, 0.15, 1)  # Very dark border
-                Ellipse(pos=(x - radius * 1.1, y - radius * 1.1), size=(radius * 2.2, radius * 2.2))
+            # Check if showing diamond
+            if bubble.showing_diamond:
+                # Load texture lazily if not already loaded
+                if self.diamond_texture is None:
+                    self.load_diamond_image()
                 
-                # Main rock body - dark stone gray
-                Color(0.2, 0.2, 0.25, 1)  # Dark stone gray
-                Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius * 2))
+                # Use diamond image if available
+                if self.diamond_texture:
+                    # Draw diamond image centered on bubble
+                    diamond_size = radius * 2  # Size to match bubble size
+                    Color(1, 1, 1, 1)  # Full color (no tinting)
+                    Rectangle(texture=self.diamond_texture,
+                             pos=(x - diamond_size / 2, y - diamond_size / 2),
+                             size=(diamond_size, diamond_size))
+                else:
+                    # Fallback: draw diamond shape - bright blue/cyan with sparkles
+                    # Outer glow
+                    Color(0.5, 0.8, 1.0, 0.3)  # Light blue glow
+                    Ellipse(pos=(x - radius * 1.2, y - radius * 1.2), size=(radius * 2.4, radius * 2.4))
+                    
+                    # Diamond shape - draw as rotated square (diamond)
+                    diamond_size = radius * 1.6
+                    Color(0.3, 0.8, 1.0, 1.0)  # Bright cyan/blue
+                    # Draw diamond as 4 triangles forming a diamond
+                    # Top triangle
+                    Triangle(points=[
+                        x, y + diamond_size * 0.6,  # Top point
+                        x - diamond_size * 0.5, y,  # Left point
+                        x + diamond_size * 0.5, y   # Right point
+                    ])
+                    # Bottom triangle
+                    Triangle(points=[
+                        x, y - diamond_size * 0.6,  # Bottom point
+                        x - diamond_size * 0.5, y,  # Left point
+                        x + diamond_size * 0.5, y   # Right point
+                    ])
+                    
+                    # Add highlights for sparkle effect
+                    Color(1.0, 1.0, 1.0, 0.8)  # White highlight
+                    highlight_size = radius * 0.3
+                    Ellipse(pos=(x - radius * 0.3 - highlight_size/2, y + radius * 0.3 - highlight_size/2), 
+                           size=(highlight_size, highlight_size))
+                    Ellipse(pos=(x + radius * 0.2 - highlight_size/2, y - radius * 0.2 - highlight_size/2), 
+                           size=(highlight_size * 0.6, highlight_size * 0.6))
+            else:
+                # Load texture lazily if not already loaded
+                if self.rock_texture is None:
+                    self.load_rock_image()
+                
+                # Use rock image if available
+                if self.rock_texture:
+                    # Draw rock image centered on bubble
+                    rock_size = radius * 2  # Size to match bubble size
+                    Color(1, 1, 1, 1)  # Full color (no tinting)
+                    Rectangle(texture=self.rock_texture,
+                             pos=(x - rock_size / 2, y - rock_size / 2),
+                             size=(rock_size, rock_size))
+                else:
+                    # Fallback: draw dark stone appearance if image not available
+                    # Outer dark border for visibility
+                    Color(0.1, 0.1, 0.15, 1)  # Very dark border
+                    Ellipse(pos=(x - radius * 1.1, y - radius * 1.1), size=(radius * 2.2, radius * 2.2))
+                    
+                    # Main rock body - dark stone gray
+                    Color(0.2, 0.2, 0.25, 1)  # Dark stone gray
+                    Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius * 2))
             
             return  # Don't draw normal bubble for rocks
         
@@ -4193,6 +4350,14 @@ class BubbleShooterGame(Widget):
                      pos=(text_x, text_y), 
                      size=shots_label.texture.size)
             
+            # ===== DIAMOND STORAGE (Above Total Score) =====
+            diamond_text = f'{self.diamond_storage}'  # Just the count (diamond image will be drawn separately)
+            diamond_font_size = self.base_font_size_small * self.scale
+            diamond_label = CoreLabel(text=diamond_text, 
+                                     font_size=diamond_font_size, 
+                                     color=(0.3, 0.8, 1.0, 1))  # Bright cyan/blue for diamond
+            diamond_label.refresh()
+            
             # ===== TOTAL SCORE (Above Score Box) =====
             total_score_text = f'Total Score: {self.total_score + self.score:,}'  # Current level score + cumulative
             total_score_font_size = self.base_font_size_small * self.scale
@@ -4238,6 +4403,48 @@ class BubbleShooterGame(Widget):
             total_score_panel_y = 30 * self.scale + score_panel_height + 2 * self.scale  # Minimal gap (2px scaled) above score panel
             total_score_panel_width = total_score_label.texture.size[0] + 40 * self.scale
             total_score_panel_height = total_score_label.texture.size[1] + 15 * self.scale
+            
+            # Diamond Storage position (above total score on RIGHT side)
+            diamond_panel_y = total_score_panel_y + total_score_panel_height + 2 * self.scale  # Above total score
+            # Make panel wider to accommodate diamond image + text
+            diamond_panel_width = diamond_label.texture.size[0] + 80 * self.scale  # Extra space for diamond image
+            diamond_panel_height = max(diamond_label.texture.size[1], 60 * self.scale) + 15 * self.scale  # Ensure enough height for image
+            
+            # Diamond Storage panel shadow
+            Color(0, 0, 0, 0.3)
+            Rectangle(pos=(score_panel_x + 15 * self.scale, diamond_panel_y - 6 * self.scale), 
+                     size=(diamond_panel_width, diamond_panel_height))
+            
+            # Diamond Storage panel background (bright cyan/blue)
+            Color(0.1, 0.3, 0.4, 0.85)  # Dark cyan/blue background
+            Rectangle(pos=(score_panel_x, diamond_panel_y), 
+                     size=(diamond_panel_width, diamond_panel_height))
+            
+            # Diamond Storage panel top highlight
+            Color(0.2, 0.6, 0.8, 0.6)
+            Rectangle(pos=(score_panel_x, diamond_panel_y + diamond_panel_height - 9 * self.scale), 
+                     size=(diamond_panel_width, 9 * self.scale))
+            
+            # Draw diamond image icon (left side)
+            if self.diamond_texture is None:
+                self.load_diamond_image()
+            
+            if self.diamond_texture:
+                diamond_icon_size = 50 * self.scale  # Size of diamond icon
+                diamond_icon_x = score_panel_x + 20 * self.scale
+                diamond_icon_y = diamond_panel_y + (diamond_panel_height - diamond_icon_size) / 2
+                Color(1, 1, 1, 1)  # Full color
+                Rectangle(texture=self.diamond_texture,
+                         pos=(diamond_icon_x, diamond_icon_y),
+                         size=(diamond_icon_size, diamond_icon_size))
+            
+            # Draw Diamond Storage text (right of icon)
+            diamond_text_x = score_panel_x + 80 * self.scale  # Start after icon
+            diamond_text_y = diamond_panel_y + (diamond_panel_height - diamond_label.texture.size[1]) / 2
+            Color(0.3, 0.8, 1.0, 1)  # Bright cyan/blue text
+            Rectangle(texture=diamond_label.texture, 
+                     pos=(diamond_text_x, diamond_text_y), 
+                     size=diamond_label.texture.size)
             
             # Total Score panel shadow
             Color(0, 0, 0, 0.3)
