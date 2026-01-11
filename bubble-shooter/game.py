@@ -182,6 +182,118 @@ class Warship:
                 bubble_top >= warship_bottom and bubble_bottom <= warship_top)
 
 
+class Snake:
+    """Represents a snake that moves in a smooth serpentine pattern across the screen"""
+
+    def __init__(self, x, y, direction=1, speed=100, base_width=400, base_height=60, wave_amplitude=100, wave_frequency=2.0):
+        self.direction = direction  # 1 for right, -1 for left
+        self.speed = speed
+        self.width = base_width  # Snake width (body length)
+        self.height = base_height  # Snake height (body thickness)
+        self.wave_amplitude = wave_amplitude  # Wave amplitude for sinusoidal path
+        self.wave_frequency = wave_frequency  # Wave frequency
+        self.wave_time = 0.0  # Time counter for wave calculation
+        self.base_y = y  # Base Y position for wave calculation
+        self.active = True
+        self.exploded = False
+        
+        # Store body segment positions for smooth serpentine motion
+        # Calculate number of segments based on body length
+        segment_spacing = base_height * 0.7  # Spacing between segments
+        self.num_segments = max(8, int(base_width / segment_spacing))
+        self.segment_positions = []  # List of (x, y) tuples for each segment
+        self.segment_spacing = segment_spacing
+        
+        # Initialize segment positions in a line
+        for i in range(self.num_segments):
+            seg_x = x - (self.num_segments - 1 - i) * segment_spacing * direction
+            seg_y = y
+            self.segment_positions.append((seg_x, seg_y))
+        
+        # Head position (first segment)
+        self.x = self.segment_positions[0][0]
+        self.y = self.segment_positions[0][1]
+
+    def update(self, dt, screen_width, screen_height):
+        """Update snake position with smooth serpentine motion"""
+        if not self.active or self.exploded:
+            return
+
+        # Update wave time
+        self.wave_time += dt
+
+        # Move head (first segment) horizontally with wave pattern
+        head_x, head_y = self.segment_positions[0]
+        head_x += self.direction * self.speed * dt
+        
+        # Calculate head Y position with sinusoidal wave
+        wave_y = self.base_y + self.wave_amplitude * math.sin(self.wave_time * self.wave_frequency)
+        
+        # Keep Y within screen bounds
+        max_y = screen_height - self.height / 2 - 50
+        min_y = self.height / 2 + 50
+        wave_y = max(min_y, min(max_y, wave_y))
+        
+        # Update head position
+        self.segment_positions[0] = (head_x, wave_y)
+        
+        # Update body segments - each follows the segment in front
+        for i in range(1, self.num_segments):
+            prev_x, prev_y = self.segment_positions[i - 1]
+            curr_x, curr_y = self.segment_positions[i]
+            
+            # Calculate direction to previous segment
+            dx = prev_x - curr_x
+            dy = prev_y - curr_y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            # Move current segment towards previous segment
+            if distance > self.segment_spacing:
+                # Normalize direction
+                if distance > 0:
+                    dx_norm = dx / distance
+                    dy_norm = dy / distance
+                else:
+                    dx_norm = 0
+                    dy_norm = 0
+                
+                # Move segment to maintain spacing
+                move_distance = distance - self.segment_spacing
+                new_x = curr_x + dx_norm * move_distance
+                new_y = curr_y + dy_norm * move_distance
+                
+                self.segment_positions[i] = (new_x, new_y)
+        
+        # Update main position (head position)
+        self.x = self.segment_positions[0][0]
+        self.y = self.segment_positions[0][1]
+
+        # Check if snake has left the screen
+        if self.direction > 0 and self.x > screen_width + self.width:
+            self.active = False
+        elif self.direction < 0 and self.x < -self.width:
+            self.active = False
+
+    def check_collision(self, bubble):
+        """Check if a bubble collides with any segment of the snake"""
+        if not self.active or self.exploded:
+            return False
+
+        # Check collision with each segment
+        segment_radius = self.height / 2
+        bubble_radius = bubble.radius
+        
+        for seg_x, seg_y in self.segment_positions:
+            dx = bubble.x - seg_x
+            dy = bubble.y - seg_y
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            if distance <= (bubble_radius + segment_radius):
+                return True
+        
+        return False
+
+
 class Balloon:
     """Represents a balloon that drops from the top"""
 
@@ -426,6 +538,11 @@ class BubbleShooterGame(Widget):
         self.balloon_spawn_timer = 0
         self.balloon_spawn_interval = random.uniform(5.0, 10.0)  # Random spawn interval (5-10 seconds)
         self.balloon_texture = None  # Cache for balloon texture
+
+        # Snake (for levels > 10)
+        self.snake = None
+        self.snake_spawn_timer = 0
+        self.snake_spawn_interval = random.uniform(6.0, 12.0)  # Random spawn interval (6-12 seconds)
         
         # Call on_size immediately and also after a short delay to ensure window size is set
         # This ensures scaling works even if window size is already available
@@ -847,6 +964,11 @@ class BubbleShooterGame(Widget):
         self.balloon_spawn_timer = 0
         self.balloon_spawn_interval = random.uniform(5.0, 10.0)
 
+        # Reset snake
+        self.snake = None
+        self.snake_spawn_timer = 0
+        self.snake_spawn_interval = random.uniform(6.0, 12.0)
+
         # Reload background image for the new level (if level changed)
         self.load_background_image()
         
@@ -1207,6 +1329,66 @@ class BubbleShooterGame(Widget):
                         self.shot_bubbles.remove(bubble)
                         break
 
+        # Update snake (for levels > 10, but testing in level 1)
+        if self.level >= 1:  # Changed from > 10 for testing
+            # Spawn snake if needed
+            if self.snake is None or not self.snake.active:
+                self.snake_spawn_timer += dt
+                if self.snake_spawn_timer >= self.snake_spawn_interval:
+                    self.snake_spawn_timer = 0
+                    # Set next random spawn interval
+                    self.snake_spawn_interval = random.uniform(6.0, 12.0)
+
+                    # Randomly choose direction (left or right)
+                    direction = random.choice([-1, 1])
+                    # Randomly choose Y position (middle area of screen)
+                    min_y = self.height * 0.3
+                    max_y = self.height * 0.7
+                    y_pos = min_y + random.random() * (max_y - min_y)
+                    
+                    if direction > 0:
+                        # Moving right: start from left side
+                        x_pos = -200
+                    else:
+                        # Moving left: start from right side
+                        x_pos = self.width + 200
+                    
+                    # Snake size increases with level
+                    base_width = 400
+                    base_height = 60
+                    # Size multiplier: 1.0 at level 11, 1.5 at level 20, 2.0 at level 30
+                    size_multiplier = 1.0 + (self.level - 11) * 0.05
+                    width = base_width * size_multiplier * self.scale
+                    height = base_height * size_multiplier * self.scale
+                    
+                    # Snake speed: moderate speed
+                    base_speed = 100 * self.scale
+                    if self.level >= 20:
+                        # Speed increases for higher levels
+                        speed_multiplier = 1.0 + (self.level - 20) * 0.05
+                        speed = base_speed * speed_multiplier
+                    else:
+                        speed = base_speed
+                    
+                    # Random wave parameters
+                    wave_amplitude = random.uniform(80, 150) * self.scale
+                    wave_frequency = random.uniform(1.5, 3.0)
+                    
+                    self.snake = Snake(x_pos, y_pos, direction, speed, width, height, wave_amplitude, wave_frequency)
+
+            # Update snake
+            if self.snake and self.snake.active:
+                self.snake.update(dt, self.width, self.height)
+
+                # Check collision with shot bubbles (block them)
+                for bubble in self.shot_bubbles[:]:
+                    if self.snake.check_collision(bubble):
+                        # Snake blocks the bubble - remove it
+                        self.shot_bubbles.remove(bubble)
+                        # Optional: create a small impact effect
+                        self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color(), particle_count=5, speed_multiplier=0.5)
+                        break
+
         # Update balloon (for levels > 30)
         if self.level > 30:
             # Spawn balloon if needed
@@ -1306,6 +1488,7 @@ class BubbleShooterGame(Widget):
             self.draw_helicopter()  # Draw helicopter
             self.draw_warship()  # Draw warship
             self.draw_balloon()  # Draw balloon
+            self.draw_snake()  # Draw snake
             self.draw_shooter()
             self.draw_particles()  # Draw particles on top
             self.draw_ui()
@@ -3117,6 +3300,203 @@ class BubbleShooterGame(Widget):
                     x - basket_width/3, y - height/2 - basket_height], width=2)
         Line(points=[x + basket_width/3, y - height/2,
                     x + basket_width/3, y - height/2 - basket_height], width=2)
+
+    def draw_snake(self):
+        """Draw a professional, flexible, and beautiful snake with smooth serpentine motion"""
+        if not self.snake or not self.snake.active:
+            return
+
+        height = self.snake.height
+        segment_radius = height / 2
+        num_segments = len(self.snake.segment_positions)
+        
+        # Draw body segments following the actual path
+        for i, (seg_x, seg_y) in enumerate(self.snake.segment_positions):
+            # Calculate segment color with gradient (head is brighter, tail is darker)
+            progress = i / max(1, num_segments - 1)
+            base_green = 0.5 + (1.0 - progress) * 0.3  # Head: 0.8, Tail: 0.5
+            
+            # Base color (rich green with variation)
+            r = 0.1 + base_green * 0.15
+            g = 0.6 + base_green * 0.3
+            b = 0.1 + base_green * 0.2
+            
+            # Draw body segment with scale pattern
+            segment_size = segment_radius * 2
+            
+            # Shadow/outline (darker)
+            Color(r * 0.5, g * 0.6, b * 0.5, 0.6)
+            Ellipse(pos=(seg_x - segment_radius * 1.05, seg_y - segment_radius * 1.05),
+                   size=(segment_size * 1.05, segment_size * 1.05))
+            
+            # Main body segment (base color)
+            Color(r, g, b, 1)
+            Ellipse(pos=(seg_x - segment_radius, seg_y - segment_radius),
+                   size=(segment_size, segment_size))
+            
+            # Scale pattern (diamond shape on alternating segments)
+            if i % 2 == 0:  # Alternating scales
+                scale_color_r = min(1.0, r * 1.3)
+                scale_color_g = min(1.0, g * 1.2)
+                Color(scale_color_r, scale_color_g, b * 0.9, 0.7)
+                
+                # Draw scale as a diamond using two triangles
+                scale_size = segment_radius * 0.6
+                
+                # Calculate scale orientation based on segment direction
+                if i < num_segments - 1:
+                    # Use direction to next segment
+                    next_x, next_y = self.snake.segment_positions[i + 1]
+                    angle = math.atan2(next_y - seg_y, next_x - seg_x)
+                    cos_a = math.cos(angle)
+                    sin_a = math.sin(angle)
+                elif i > 0:
+                    # Last segment: use direction from previous segment
+                    prev_x, prev_y = self.snake.segment_positions[i - 1]
+                    angle = math.atan2(seg_y - prev_y, seg_x - prev_x)
+                    cos_a = math.cos(angle)
+                    sin_a = math.sin(angle)
+                else:
+                    # Head segment (only segment): use movement direction
+                    if self.snake.direction > 0:
+                        angle = 0
+                        cos_a = 1
+                        sin_a = 0
+                    else:
+                        angle = math.pi
+                        cos_a = -1
+                        sin_a = 0
+                
+                # Scale points (rotated diamond)
+                scale_w = scale_size * 0.4
+                scale_h = scale_size * 0.5
+                
+                # Top triangle of diamond
+                p1_x = seg_x + cos_a * scale_h - sin_a * 0
+                p1_y = seg_y + sin_a * scale_h + cos_a * 0
+                p2_x = seg_x + cos_a * 0 - sin_a * scale_w
+                p2_y = seg_y + sin_a * 0 + cos_a * scale_w
+                p3_x = seg_x + cos_a * 0 + sin_a * scale_w
+                p3_y = seg_y + sin_a * 0 - cos_a * scale_w
+                
+                Triangle(points=[p1_x, p1_y, p2_x, p2_y, p3_x, p3_y])
+                
+                # Bottom triangle of diamond
+                p1_x = seg_x - cos_a * scale_h - sin_a * 0
+                p1_y = seg_y - sin_a * scale_h + cos_a * 0
+                Triangle(points=[p1_x, p1_y, p2_x, p2_y, p3_x, p3_y])
+            
+            # Highlight on top of each segment (3D effect)
+            highlight_radius = segment_radius * 0.4
+            Color(1.0, 1.0, 0.9, 0.4)  # Light yellow/white highlight
+            Ellipse(pos=(seg_x - highlight_radius * 0.3, seg_y + segment_radius * 0.3),
+                   size=(highlight_radius * 2, highlight_radius * 1.5))
+        
+        # Draw professional snake head (first segment is the head)
+        if num_segments > 0:
+            head_x, head_y = self.snake.segment_positions[0]
+            head_radius = height * 0.65  # Head is slightly larger than body
+            head_size = head_radius * 2
+            
+            # Head shadow
+            Color(0.05, 0.3, 0.05, 0.5)
+            Ellipse(pos=(head_x - head_radius * 1.05, head_y - head_radius * 1.05),
+                   size=(head_size * 1.05, head_size * 1.05))
+            
+            # Head base (slightly brighter than body)
+            Color(0.2, 0.75, 0.25, 1)
+            Ellipse(pos=(head_x - head_radius, head_y - head_radius),
+                   size=(head_size, head_size))
+            
+            # Head highlight (3D effect)
+            highlight_radius_head = head_radius * 0.5
+            Color(0.4, 0.9, 0.5, 0.6)
+            Ellipse(pos=(head_x - highlight_radius_head * 0.5, head_y + head_radius * 0.3),
+                   size=(highlight_radius_head * 2, highlight_radius_head * 1.5))
+            
+            # Draw eyes - calculate eye position based on head direction
+            eye_size = head_radius * 0.35
+            eye_offset_y = head_radius * 0.25
+            eye_distance_x = head_radius * 0.35
+            
+            # Calculate head direction from first two segments
+            if num_segments > 1:
+                next_x, next_y = self.snake.segment_positions[1]
+                head_angle = math.atan2(head_y - next_y, head_x - next_x)
+                eye_dir_x = math.cos(head_angle)
+                eye_dir_y = math.sin(head_angle)
+            else:
+                eye_dir_x = self.snake.direction
+                eye_dir_y = 0
+            
+            # Eye positions (on the front-facing side of head)
+            eye_center_x = head_x + eye_dir_x * eye_distance_x * 0.55
+            eye_left_x = eye_center_x - eye_dir_y * eye_distance_x * 0.25
+            eye_right_x = eye_center_x + eye_dir_y * eye_distance_x * 0.25
+            eye_top_y = head_y + eye_dir_y * eye_distance_x * 0.3 + eye_offset_y
+            eye_bottom_y = head_y + eye_dir_y * eye_distance_x * 0.3 - eye_offset_y
+            
+            # Eye whites with glow
+            Color(1, 1, 1, 0.9)
+            Ellipse(pos=(eye_left_x - eye_size/2, eye_top_y - eye_size/2),
+                   size=(eye_size, eye_size))
+            Ellipse(pos=(eye_right_x - eye_size/2, eye_top_y - eye_size/2),
+                   size=(eye_size, eye_size))
+            Ellipse(pos=(eye_left_x - eye_size/2, eye_bottom_y - eye_size/2),
+                   size=(eye_size, eye_size))
+            Ellipse(pos=(eye_right_x - eye_size/2, eye_bottom_y - eye_size/2),
+                   size=(eye_size, eye_size))
+            
+            # Eye pupils (black with small highlight)
+            pupil_size = eye_size * 0.55
+            Color(0, 0, 0, 1)
+            Ellipse(pos=(eye_left_x - pupil_size/2, eye_top_y - pupil_size/2),
+                   size=(pupil_size, pupil_size))
+            Ellipse(pos=(eye_right_x - pupil_size/2, eye_top_y - pupil_size/2),
+                   size=(pupil_size, pupil_size))
+            Ellipse(pos=(eye_left_x - pupil_size/2, eye_bottom_y - pupil_size/2),
+                   size=(pupil_size, pupil_size))
+            Ellipse(pos=(eye_right_x - pupil_size/2, eye_bottom_y - pupil_size/2),
+                   size=(pupil_size, pupil_size))
+            
+            # Eye highlights (small white spots for reflection)
+            highlight_spot_size = pupil_size * 0.3
+            Color(1, 1, 1, 0.9)
+            highlight_offset = pupil_size * 0.15
+            Ellipse(pos=(eye_left_x - highlight_spot_size/2 + highlight_offset,
+                        eye_top_y - highlight_spot_size/2 + highlight_offset),
+                   size=(highlight_spot_size, highlight_spot_size))
+            Ellipse(pos=(eye_right_x - highlight_spot_size/2 + highlight_offset,
+                        eye_top_y - highlight_spot_size/2 + highlight_offset),
+                   size=(highlight_spot_size, highlight_spot_size))
+            Ellipse(pos=(eye_left_x - highlight_spot_size/2 + highlight_offset,
+                        eye_bottom_y - highlight_spot_size/2 + highlight_offset),
+                   size=(highlight_spot_size, highlight_spot_size))
+            Ellipse(pos=(eye_right_x - highlight_spot_size/2 + highlight_offset,
+                        eye_bottom_y - highlight_spot_size/2 + highlight_offset),
+                   size=(highlight_spot_size, highlight_spot_size))
+            
+            # Nostrils (small dark circles)
+            nostril_size = head_radius * 0.08
+            nostril_y = head_y
+            nostril_offset_x = head_radius * 0.4
+            nostril_x = head_x - eye_dir_x * nostril_offset_x
+            
+            Color(0.1, 0.2, 0.1, 1)
+            nostril_spacing = nostril_offset_x * 0.15
+            Ellipse(pos=(nostril_x - nostril_spacing - nostril_size/2, nostril_y - nostril_size/2),
+                   size=(nostril_size, nostril_size))
+            Ellipse(pos=(nostril_x - nostril_spacing - nostril_size/2, nostril_y + nostril_size - nostril_size/2),
+                   size=(nostril_size, nostril_size))
+            
+            # Mouth line (subtle)
+            mouth_width = head_radius * 0.5
+            mouth_y = head_y - head_radius * 0.2
+            mouth_start_x = head_x - eye_dir_x * mouth_width * 0.3
+            mouth_end_x = head_x - eye_dir_x * mouth_width * 0.8
+            
+            Color(0.15, 0.35, 0.15, 0.8)
+            Line(points=[mouth_start_x, mouth_y, mouth_end_x, mouth_y], width=max(1, int(head_radius * 0.1)))
 
     def draw_shooter(self):
         """Draw bazooka-style shooter with laser aim"""
