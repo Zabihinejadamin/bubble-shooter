@@ -519,7 +519,9 @@ class BubbleShooterGame(Widget):
         self.sound_two_bubbles = None
         self.sound_four_bubbles = None
         self.sound_nice_shot = None
+        self.sound_diamond = None
         self.load_explosion_sounds()
+        self.load_diamond_sound()
         
         # Enhanced graphics system
         self.graphics_enhancer = None
@@ -1558,6 +1560,8 @@ class BubbleShooterGame(Widget):
                         closest_bubble.diamond_show_timer = 2.0  # Show for 2 seconds
                         # Create special diamond particles (sparkly effect)
                         self.create_explosion_particles(closest_bubble.x, closest_bubble.y, (0.8, 0.9, 1.0), particle_count=20, speed_multiplier=1.2)
+                        # Play diamond sound
+                        self.play_diamond_sound()
                         print(f"Diamond revealed! It will drop and be added to storage.")
                     else:
                         # Regular rock - make it fall immediately
@@ -2881,6 +2885,35 @@ class BubbleShooterGame(Widget):
                 self.sound_nice_shot.play()
         except Exception as e:
             print(f"Error playing nice shot sound: {e}")
+    
+    def load_diamond_sound(self):
+        """Load diamond sound effect"""
+        # Use the specified diamond sound file
+        diamond_sound_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\diamond.mp3"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(diamond_sound_path):
+            diamond_sound_path = self.get_asset_path("diamond.mp3")
+        
+        if diamond_sound_path and os.path.exists(diamond_sound_path):
+            try:
+                self.sound_diamond = SoundLoader.load(diamond_sound_path)
+                if not self.sound_diamond:
+                    print(f"Failed to load diamond.mp3")
+                else:
+                    print(f"Successfully loaded diamond sound: {diamond_sound_path}")
+            except Exception as e:
+                print(f"Error loading diamond.mp3: {e}")
+        else:
+            print(f"Diamond sound file not found: {diamond_sound_path}")
+    
+    def play_diamond_sound(self):
+        """Play diamond sound when diamond is detected"""
+        try:
+            if self.sound_diamond:
+                self.sound_diamond.play()
+        except Exception as e:
+            print(f"Error playing diamond sound: {e}")
     
     def play_explosion_sound(self, count):
         """Play appropriate explosion sound based on bubble count"""
