@@ -943,9 +943,49 @@ class BubbleShooterGame(Widget):
             from levels.level30 import Level30
             self.current_level = Level30()
         elif current_level_num == 30:
-            # Final level completed! Restart Level 30
-            from levels.level30 import Level30
-            self.current_level = Level30()
+            # Advance to Level 31
+            from levels.level31 import Level31
+            self.current_level = Level31()
+        elif current_level_num == 31:
+            # Advance to Level 32
+            from levels.level32 import Level32
+            self.current_level = Level32()
+        elif current_level_num == 32:
+            # Advance to Level 33
+            from levels.level33 import Level33
+            self.current_level = Level33()
+        elif current_level_num == 33:
+            # Advance to Level 34
+            from levels.level34 import Level34
+            self.current_level = Level34()
+        elif current_level_num == 34:
+            # Advance to Level 35
+            from levels.level35 import Level35
+            self.current_level = Level35()
+        elif current_level_num == 35:
+            # Advance to Level 36
+            from levels.level36 import Level36
+            self.current_level = Level36()
+        elif current_level_num == 36:
+            # Advance to Level 37
+            from levels.level37 import Level37
+            self.current_level = Level37()
+        elif current_level_num == 37:
+            # Advance to Level 38
+            from levels.level38 import Level38
+            self.current_level = Level38()
+        elif current_level_num == 38:
+            # Advance to Level 39
+            from levels.level39 import Level39
+            self.current_level = Level39()
+        elif current_level_num == 39:
+            # Advance to Level 40
+            from levels.level40 import Level40
+            self.current_level = Level40()
+        elif current_level_num == 40:
+            # Final level completed! Restart Level 40
+            from levels.level40 import Level40
+            self.current_level = Level40()
         else:
             # Default: restart current level
             pass
@@ -1124,8 +1164,8 @@ class BubbleShooterGame(Widget):
                         self.shot_bubbles.remove(bubble)
                         break
 
-        # Update balloon (for levels > 30, but testing in level 1)
-        if self.level >= 1:  # Changed from > 30 for testing
+        # Update balloon (for levels > 30)
+        if self.level > 30:
             # Spawn balloon if needed
             if self.balloon is None or not self.balloon.active:
                 self.balloon_spawn_timer += dt

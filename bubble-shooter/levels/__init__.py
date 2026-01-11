@@ -33,8 +33,19 @@ from .level27 import Level27
 from .level28 import Level28
 from .level29 import Level29
 from .level30 import Level30
+from .level31 import Level31
+from .level32 import Level32
+from .level33 import Level33
+from .level34 import Level34
+from .level35 import Level35
+from .level36 import Level36
+from .level37 import Level37
+from .level38 import Level38
+from .level39 import Level39
+from .level40 import Level40
 
 __all__ = ['LevelBase', 'Level1', 'Level2', 'Level3', 'Level4', 'Level5', 'Level6', 'Level7', 'Level8', 'Level9',
            'Level10', 'Level11', 'Level12', 'Level13', 'Level14', 'Level15', 'Level16', 'Level17', 'Level18', 'Level19', 'Level20',
-           'Level21', 'Level22', 'Level23', 'Level24', 'Level25', 'Level26', 'Level27', 'Level28', 'Level29', 'Level30']
+           'Level21', 'Level22', 'Level23', 'Level24', 'Level25', 'Level26', 'Level27', 'Level28', 'Level29', 'Level30',
+           'Level31', 'Level32', 'Level33', 'Level34', 'Level35', 'Level36', 'Level37', 'Level38', 'Level39', 'Level40']
 
