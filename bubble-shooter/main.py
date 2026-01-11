@@ -151,7 +151,9 @@ class BubbleShooterApp(App):
             Window.fullscreen = False
         
         # Load saved level or start from Level 1
-        saved_level = load_saved_level()
+        # For testing: always start at Level 1
+        # saved_level = load_saved_level()
+        saved_level = Level1()  # Reset to Level 1 for testing
         
         # Create a FloatLayout to ensure full screen coverage
         root_layout = FloatLayout()

@@ -354,6 +354,7 @@ class Bubble:
         self.has_dynamite = False  # Does this bubble contain dynamite?
         self.has_mine = False  # Does this bubble contain a mine?
         self.has_golden = False  # Is this a golden bubble? (extra score when shot directly)
+        self.is_rock = False  # Is this a rock? (doesn't explode, falls when hit)
         self.falling = False  # Is bubble falling (disconnected from top)?
         self.gravity = 300  # Gravity acceleration for falling bubbles
     
@@ -370,6 +371,8 @@ class Bubble:
     
     def get_color(self):
         """Get color tuple for drawing"""
+        if self.is_rock:
+            return (0.25, 0.25, 0.3)  # Dark gray/stone color for rocks (very visible)
         return self.color
     
     def check_collision(self, other):
@@ -439,6 +442,7 @@ class BubbleShooterGame(Widget):
         # Bubbles
         self.grid_bubbles = []  # Bubbles in grid
         self.shot_bubbles = []  # Currently shot bubble
+        self.falling_bubbles = []  # Bubbles that are falling (rocks, disconnected bubbles)
         self.next_bubble = None  # Next bubble to shoot
         
         # Shooter (base values for 1080x2424)
@@ -493,6 +497,10 @@ class BubbleShooterGame(Widget):
 
         # Warship image (loaded lazily in draw_warship)
         self.warship_texture = None
+
+        # Rock image
+        self.rock_texture = None
+        self.load_rock_image()
 
         # Background music
         self.background_music = None
@@ -742,6 +750,23 @@ class BubbleShooterGame(Widget):
                 # Verify no intersection before adding
                 if not self.check_bubble_intersections(bubble):
                     self.grid_bubbles.append(bubble)
+        
+        # Assign rocks (for levels > 5, but testing in level 1)
+        if self.level >= 1 and len(self.grid_bubbles) > 0:  # Changed from > 5 for testing
+            num_rocks = random.randint(3, 5)
+            
+            # Randomly select bubbles to be rocks
+            # Don't mark bubbles that already have dynamite, mines, or golden
+            available_bubbles = [b for b in self.grid_bubbles if not b.has_dynamite and not b.has_mine and not b.has_golden]
+            
+            # Assign rocks - use minimum of requested rocks and available bubbles
+            if len(available_bubbles) > 0:
+                num_rocks = min(num_rocks, len(available_bubbles))
+                rocks_to_assign = random.sample(available_bubbles, num_rocks)
+                for bubble in rocks_to_assign:
+                    bubble.is_rock = True
+                # Debug: print number of rocks assigned
+                print(f"Assigned {len(rocks_to_assign)} rocks in level {self.level}")
     
     def load_next_bubble(self):
         """Load next bubble to shoot"""
@@ -946,6 +971,7 @@ class BubbleShooterGame(Widget):
         # Clear bubbles
         self.grid_bubbles = []
         self.shot_bubbles = []
+        self.falling_bubbles = []
         self.current_bubble = None
         self.next_bubble = None
         
@@ -968,6 +994,9 @@ class BubbleShooterGame(Widget):
         self.snake = None
         self.snake_spawn_timer = 0
         self.snake_spawn_interval = random.uniform(6.0, 12.0)
+
+        # Reset falling bubbles (rocks)
+        self.falling_bubbles = []
 
         # Reload background image for the new level (if level changed)
         self.load_background_image()
@@ -1179,13 +1208,19 @@ class BubbleShooterGame(Widget):
             with self.canvas:
                 self.draw_background()
                 self.draw_grid()
+                self.draw_falling_bubbles()  # Draw falling rocks
                 self.draw_shot_bubbles()
                 self.draw_shooter()
                 self.draw_particles()  # Draw particles on top
                 self.draw_ui()
             return
         
-        # No longer need to update falling bubbles - disconnected bubbles are removed immediately
+        # Update falling bubbles (rocks)
+        for bubble in self.falling_bubbles[:]:
+            bubble.update(dt)
+            # Remove if off screen
+            if bubble.y + bubble.radius < 0:
+                self.falling_bubbles.remove(bubble)
         
         # Update particles
         self.update_particles(dt)
@@ -1465,7 +1500,22 @@ class BubbleShooterGame(Widget):
                         closest_bubble = grid_bubble
             
             if closest_bubble:
-                self.attach_bubble(bubble, closest_bubble)
+                # Check if the grid bubble is a rock
+                if closest_bubble.is_rock:
+                    # Rock doesn't explode - make it fall
+                    closest_bubble.attached = False
+                    closest_bubble.falling = True
+                    closest_bubble.vy = 0  # Start falling from rest
+                    # Remove the rock from grid and add to falling bubbles
+                    self.grid_bubbles.remove(closest_bubble)
+                    self.falling_bubbles.append(closest_bubble)
+                    # Remove shot bubble
+                    self.shot_bubbles.remove(bubble)
+                    # Create small impact particles
+                    self.create_explosion_particles(closest_bubble.x, closest_bubble.y, (0.5, 0.5, 0.5), particle_count=10, speed_multiplier=0.8)
+                else:
+                    # Normal bubble - attach as usual
+                    self.attach_bubble(bubble, closest_bubble)
                 break
             
             # Remove if below screen (bubble went off bottom where shooter is)
@@ -1483,6 +1533,7 @@ class BubbleShooterGame(Widget):
         with self.canvas:
             self.draw_background()
             self.draw_grid()
+            self.draw_falling_bubbles()  # Draw falling rocks
             self.draw_shot_bubbles()
             self.draw_airplane()  # Draw airplane
             self.draw_helicopter()  # Draw helicopter
@@ -1736,6 +1787,9 @@ class BubbleShooterGame(Widget):
         
         bubbles_to_explode = []
         for bubble in self.grid_bubbles[:]:
+            # Skip rocks - they don't explode
+            if bubble.is_rock:
+                continue
             dx = bubble.x - x
             dy = bubble.y - y
             distance = math.sqrt(dx * dx + dy * dy)
@@ -1794,6 +1848,9 @@ class BubbleShooterGame(Widget):
         dynamite_to_trigger = []
 
         for bubble in self.grid_bubbles[:]:
+            # Skip rocks - they don't explode
+            if bubble.is_rock:
+                continue
             # Check if bubble is in the same row (horizontal line)
             if abs(bubble.y - warship_y) <= row_tolerance:
                 bubbles_to_explode.append(bubble)
@@ -1846,6 +1903,9 @@ class BubbleShooterGame(Widget):
         dynamite_to_trigger = []
 
         for bubble in self.grid_bubbles[:]:
+            # Skip rocks - they don't explode
+            if bubble.is_rock:
+                continue
             dx = bubble.x - x
             dy = bubble.y - y
             distance = math.sqrt(dx * dx + dy * dy)
@@ -1900,6 +1960,9 @@ class BubbleShooterGame(Widget):
         bubbles_to_remove = []
         
         for bubble in self.grid_bubbles[:]:
+            # Skip rocks - they don't explode
+            if bubble.is_rock:
+                continue
             dx = bubble.x - x
             dy = bubble.y - y
             distance = math.sqrt(dx * dx + dy * dy)
@@ -1953,6 +2016,9 @@ class BubbleShooterGame(Widget):
         dynamite_to_trigger = []
         
         for bubble in self.grid_bubbles[:]:
+            # Skip rocks - they don't explode
+            if bubble.is_rock:
+                continue
             # Check if bubble is in the same row (within tolerance)
             if abs(bubble.y - helicopter_y) <= row_tolerance:
                 bubbles_to_explode.append(bubble)
@@ -2004,6 +2070,9 @@ class BubbleShooterGame(Widget):
         dynamite_to_trigger = []
         
         for bubble in self.grid_bubbles[:]:
+            # Skip rocks - they don't explode
+            if bubble.is_rock:
+                continue
             # Check if bubble is in the same row (within tolerance)
             if abs(bubble.y - mine_y) <= row_tolerance:
                 bubbles_to_explode.append(bubble)
@@ -2385,6 +2454,59 @@ class BubbleShooterGame(Widget):
         else:
             print(f"Mine image not found: istockphoto-1474907248-612x612.jpg")
             self.mine_texture = None
+    
+    def load_rock_image(self):
+        """Load rock image texture with white background removed"""
+        # Use the specified rock image
+        rock_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\rock.jpg"
+        
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(rock_path):
+            rock_path = self.get_asset_path("rock.jpg")
+        
+        if rock_path and os.path.exists(rock_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(rock_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+                    
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+                    
+                    pil_img.putdata(new_data)
+                    
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+                    
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.rock_texture = img.texture
+                    print(f"Successfully loaded rock image: {rock_path}")
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(rock_path)
+                    self.rock_texture = img.texture
+            except Exception as e:
+                print(f"Error loading rock image: {e}")
+                self.rock_texture = None
+        else:
+            print(f"Rock image not found: {rock_path}")
+            self.rock_texture = None
     
     def load_jet_image(self):
         """Load fighter jet image texture"""
@@ -2769,6 +2891,11 @@ class BubbleShooterGame(Widget):
         for bubble in self.grid_bubbles:
             self.draw_bubble_3d(bubble)
     
+    def draw_falling_bubbles(self):
+        """Draw falling bubbles (rocks)"""
+        for bubble in self.falling_bubbles:
+            self.draw_bubble_3d(bubble)
+    
     def draw_shot_bubbles(self):
         """Draw bubbles that are being shot with 3D effects"""
         for bubble in self.shot_bubbles:
@@ -2782,6 +2909,32 @@ class BubbleShooterGame(Widget):
             y = bubble.y
         radius = bubble.radius
         color = bubble.get_color()
+        
+        # Special drawing for rocks - use rock image if available
+        if bubble.is_rock:
+            # Load texture lazily if not already loaded
+            if self.rock_texture is None:
+                self.load_rock_image()
+            
+            # Use rock image if available
+            if self.rock_texture:
+                # Draw rock image centered on bubble
+                rock_size = radius * 2  # Size to match bubble size
+                Color(1, 1, 1, 1)  # Full color (no tinting)
+                Rectangle(texture=self.rock_texture,
+                         pos=(x - rock_size / 2, y - rock_size / 2),
+                         size=(rock_size, rock_size))
+            else:
+                # Fallback: draw dark stone appearance if image not available
+                # Outer dark border for visibility
+                Color(0.1, 0.1, 0.15, 1)  # Very dark border
+                Ellipse(pos=(x - radius * 1.1, y - radius * 1.1), size=(radius * 2.2, radius * 2.2))
+                
+                # Main rock body - dark stone gray
+                Color(0.2, 0.2, 0.25, 1)  # Dark stone gray
+                Ellipse(pos=(x - radius, y - radius), size=(radius * 2, radius * 2))
+            
+            return  # Don't draw normal bubble for rocks
         
         # Try to use enhanced graphics texture if available
         has_special = bubble.has_dynamite or bubble.has_mine or bubble.has_golden
