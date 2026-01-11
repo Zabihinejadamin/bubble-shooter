@@ -3496,6 +3496,14 @@ class BubbleShooterGame(Widget):
                      pos=(text_x, text_y), 
                      size=shots_label.texture.size)
             
+            # ===== TOTAL SCORE (Above Score Box) =====
+            total_score_text = f'Total Score: {self.total_score + self.score:,}'  # Current level score + cumulative
+            total_score_font_size = self.base_font_size_small * self.scale
+            total_score_label = CoreLabel(text=total_score_text, 
+                                         font_size=total_score_font_size, 
+                                         color=(1, 1, 0.8, 1))  # Light yellow/gold color
+            total_score_label.refresh()
+            
             # ===== LEVEL NUMBER (Above Score Box) =====
             level_text = f'Level {self.level}'
             level_font_size = self.base_font_size_medium * self.scale
@@ -3520,28 +3528,57 @@ class BubbleShooterGame(Widget):
             # Calculate position for bottom right
             score_panel_x = self.width - score_panel_width - 30 * self.scale
             
-            # Level number position (above score box)
-            # Position level panel directly above score panel with minimal gap
-            level_panel_y = 30 * self.scale + score_panel_height + 2 * self.scale  # Minimal gap (2px scaled)
+            # Level number position (above shots panel on LEFT side)
+            # Position level panel directly above shots panel with minimal gap
+            level_panel_y = 30 * self.scale + panel_height + 2 * self.scale  # Minimal gap (2px scaled) above shots panel
+            level_panel_x = 30 * self.scale  # Left side, same as shots panel
             
-            # Draw level number background (small panel above score) - use only text width, not score panel width
-            level_panel_width = level_label.texture.size[0] + 40 * self.scale  # Reduced from 60, and no longer matches score panel width
-            level_panel_height = level_label.texture.size[1] + 18 * self.scale  # Reduced from 24
+            # Draw level number background (small panel above shots) - use only text width
+            level_panel_width = level_label.texture.size[0] + 40 * self.scale
+            level_panel_height = level_label.texture.size[1] + 18 * self.scale
             
-            # Level panel shadow
+            # Total Score position (above score box on RIGHT side)
+            total_score_panel_y = 30 * self.scale + score_panel_height + 2 * self.scale  # Minimal gap (2px scaled) above score panel
+            total_score_panel_width = total_score_label.texture.size[0] + 40 * self.scale
+            total_score_panel_height = total_score_label.texture.size[1] + 15 * self.scale
+            
+            # Total Score panel shadow
             Color(0, 0, 0, 0.3)
-            Rectangle(pos=(score_panel_x + 15 * self.scale, level_panel_y - 6 * self.scale), size=(level_panel_width, level_panel_height))
+            Rectangle(pos=(score_panel_x + 15 * self.scale, total_score_panel_y - 6 * self.scale), 
+                     size=(total_score_panel_width, total_score_panel_height))
+            
+            # Total Score panel background
+            Color(0.25, 0.2, 0.15, 0.85)  # Darker brown/gold background
+            Rectangle(pos=(score_panel_x, total_score_panel_y), 
+                     size=(total_score_panel_width, total_score_panel_height))
+            
+            # Total Score panel top highlight
+            Color(0.5, 0.4, 0.3, 0.6)
+            Rectangle(pos=(score_panel_x, total_score_panel_y + total_score_panel_height - 9 * self.scale), 
+                     size=(total_score_panel_width, 9 * self.scale))
+            
+            # Draw Total Score text (centered in panel)
+            total_score_text_x = score_panel_x + (total_score_panel_width - total_score_label.texture.size[0]) / 2
+            total_score_text_y = total_score_panel_y + 10 * self.scale
+            Color(1, 1, 0.8, 1)  # Light yellow/gold text
+            Rectangle(texture=total_score_label.texture, 
+                     pos=(total_score_text_x, total_score_text_y), 
+                     size=total_score_label.texture.size)
+            
+            # Level panel shadow (on LEFT side)
+            Color(0, 0, 0, 0.3)
+            Rectangle(pos=(level_panel_x + 15 * self.scale, level_panel_y - 6 * self.scale), size=(level_panel_width, level_panel_height))
             
             # Level panel background
             Color(0.2, 0.15, 0.3, 0.85)  # Same color as score panel
-            Rectangle(pos=(score_panel_x, level_panel_y), size=(level_panel_width, level_panel_height))
+            Rectangle(pos=(level_panel_x, level_panel_y), size=(level_panel_width, level_panel_height))
             
             # Level panel top highlight
             Color(0.4, 0.3, 0.5, 0.6)
-            Rectangle(pos=(score_panel_x, level_panel_y + level_panel_height - 9 * self.scale), size=(level_panel_width, 9 * self.scale))
+            Rectangle(pos=(level_panel_x, level_panel_y + level_panel_height - 9 * self.scale), size=(level_panel_width, 9 * self.scale))
             
             # Draw level text (centered in level panel)
-            level_text_x = score_panel_x + (level_panel_width - level_label.texture.size[0]) / 2
+            level_text_x = level_panel_x + (level_panel_width - level_label.texture.size[0]) / 2
             level_text_y = level_panel_y + 12 * self.scale
             Color(1, 1, 1, 1)  # White text
             Rectangle(texture=level_label.texture, 
