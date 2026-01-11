@@ -3,7 +3,7 @@ Bubble Shooter Game - Main game logic with 3D-style graphics
 """
 
 from kivy.uix.widget import Widget
-from kivy.graphics import Color, Ellipse, Line, Rectangle, PushMatrix, PopMatrix
+from kivy.graphics import Color, Ellipse, Line, Rectangle, Triangle, PushMatrix, PopMatrix
 from kivy.core.text import Label as CoreLabel
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
@@ -132,6 +132,53 @@ class Helicopter:
         
         return (bubble_right >= helicopter_left and bubble_left <= helicopter_right and
                 bubble_top >= helicopter_bottom and bubble_bottom <= helicopter_top)
+
+
+class Warship:
+    """Represents a warship that crosses the screen"""
+
+    def __init__(self, x, y, direction=1, speed=150):
+        self.x = x
+        self.y = y
+        self.direction = direction  # 1 for right, -1 for left
+        self.speed = speed
+        self.width = 200  # Warship width (0.5x original size)
+        self.height = 100  # Warship height (0.5x original size)
+        self.active = True
+        self.exploded = False
+
+    def update(self, dt, screen_width):
+        """Update warship position"""
+        if not self.active or self.exploded:
+            return
+
+        # Move warship (direction: 1 = right, -1 = left)
+        self.x += self.direction * self.speed * dt
+
+        # Check if warship has left the screen
+        if self.direction > 0 and self.x > screen_width + self.width:
+            self.active = False
+        elif self.direction < 0 and self.x < -self.width:
+            self.active = False
+
+    def check_collision(self, bubble):
+        """Check if a bubble collides with the warship"""
+        if not self.active or self.exploded:
+            return False
+
+        # Simple rectangle collision
+        bubble_left = bubble.x - bubble.radius
+        bubble_right = bubble.x + bubble.radius
+        bubble_top = bubble.y + bubble.radius
+        bubble_bottom = bubble.y - bubble.radius
+
+        warship_left = self.x - self.width / 2
+        warship_right = self.x + self.width / 2
+        warship_top = self.y + self.height / 2
+        warship_bottom = self.y - self.height / 2
+
+        return (bubble_right >= warship_left and bubble_left <= warship_right and
+                bubble_top >= warship_bottom and bubble_bottom <= warship_top)
 
 
 class Bubble:
@@ -281,7 +328,10 @@ class BubbleShooterGame(Widget):
         # Helicopter image
         self.helicopter_texture = None
         self.load_helicopter_image()
-        
+
+        # Warship image (loaded lazily in draw_warship)
+        self.warship_texture = None
+
         # Background music
         self.background_music = None
         self.load_background_music()
@@ -314,13 +364,19 @@ class BubbleShooterGame(Widget):
         self.helicopter = None
         self.helicopter_spawn_timer = 0
         self.helicopter_spawn_interval = random.uniform(3.0, 6.0)  # Random spawn interval (3-6 seconds)
+
+        # Warship (for levels >= 20, but testing in level 1)
+        self.warship = None
+        self.warship_spawn_timer = 0
+        self.warship_spawn_interval = random.uniform(4.0, 8.0)  # Random spawn interval (4-8 seconds)
+        self.warship_texture = None  # Cache for warship texture
         
         # Call on_size immediately and also after a short delay to ensure window size is set
         # This ensures scaling works even if window size is already available
         self.on_size()
         from kivy.clock import Clock
         Clock.schedule_once(lambda dt: self.on_size(), 0.1)
-        
+
         # Note: on_touch_down, on_touch_move, on_touch_up are automatically
         # connected by Kivy when using these method names
     
@@ -687,7 +743,12 @@ class BubbleShooterGame(Widget):
         self.helicopter = None
         self.helicopter_spawn_timer = 0
         self.helicopter_spawn_interval = random.uniform(3.0, 6.0)
-        
+
+        # Reset warship
+        self.warship = None
+        self.warship_spawn_timer = 0
+        self.warship_spawn_interval = random.uniform(4.0, 8.0)
+
         # Reload background image for the new level (if level changed)
         self.load_background_image()
         
@@ -920,7 +981,54 @@ class BubbleShooterGame(Widget):
                         # Remove the bubble that hit it
                         self.shot_bubbles.remove(bubble)
                         break
-        
+
+        # Update warship (for levels >= 20, but testing in level 1)
+        if self.level >= 1:  # Changed from >= 20 for testing
+            # Spawn warship if needed
+            if self.warship is None or not self.warship.active:
+                self.warship_spawn_timer += dt
+                if self.warship_spawn_timer >= self.warship_spawn_interval:
+                    self.warship_spawn_timer = 0
+                    # Set next random spawn interval
+                    self.warship_spawn_interval = random.uniform(4.0, 8.0)
+
+                    # Randomly choose direction (left or right)
+                    direction = random.choice([-1, 1])
+                    # Calculate minimum Y value (1200 in base resolution, scaled)
+                    min_y_base = 1200
+                    min_y_scaled = min_y_base * (self.height / self.base_height) if self.height > 0 else min_y_base
+                    # Randomly choose Y position (minimum 1200, up to 85% of screen height)
+                    max_y = self.height * 0.85
+                    y_pos = min_y_scaled + random.random() * (max_y - min_y_scaled)
+                    if direction > 0:
+                        # Moving right: start from left side
+                        x_pos = -200
+                    else:
+                        # Moving left: start from right side
+                        x_pos = self.width + 200
+                    # Warship speed: slower than helicopter
+                    base_speed = 150 * self.scale
+                    if self.level >= 25:
+                        # Calculate speed multiplier: 1.0 at level 25, 1.5 at level 30
+                        speed_multiplier = 1.0 + (self.level - 25) * 0.1
+                        speed = base_speed * speed_multiplier
+                    else:
+                        speed = base_speed
+                    self.warship = Warship(x_pos, y_pos, direction, speed=speed)
+
+            # Update warship
+            if self.warship and self.warship.active:
+                self.warship.update(dt, self.width)
+
+                # Check collision with shot bubbles
+                for bubble in self.shot_bubbles[:]:
+                    if self.warship.check_collision(bubble):
+                        # Warship hit! Explode it
+                        self.explode_warship(self.warship.x, self.warship.y)
+                        # Remove the bubble that hit it
+                        self.shot_bubbles.remove(bubble)
+                        break
+
         # Update shot bubbles
         for bubble in self.shot_bubbles[:]:
             bubble.update(dt)
@@ -981,6 +1089,7 @@ class BubbleShooterGame(Widget):
             self.draw_shot_bubbles()
             self.draw_airplane()  # Draw airplane
             self.draw_helicopter()  # Draw helicopter
+            self.draw_warship()  # Draw warship
             self.draw_shooter()
             self.draw_particles()  # Draw particles on top
             self.draw_ui()
@@ -1263,7 +1372,65 @@ class BubbleShooterGame(Widget):
         # Check if all bubbles are cleared (win condition)
         if len(self.grid_bubbles) == 0:
             self.game_active = False  # Player wins!
-    
+
+    def explode_warship(self, x, y):
+        """Explode warship and remove all bubbles in the same horizontal line"""
+        if self.warship:
+            self.warship.exploded = True
+            self.warship.active = False
+
+        # Create large explosion particles
+        self.create_explosion_particles(x, y, (0.8, 0.2, 0.2), particle_count=40, speed_multiplier=2.5)
+
+        # Find the row (y coordinate) of the warship
+        warship_y = y
+
+        # Tolerance for determining if bubbles are in the same row
+        # Account for hexagonal grid where rows are spaced by grid_spacing * 0.866
+        # Use half the spacing as tolerance
+        row_tolerance = self.grid_spacing * 0.4  # Allow tolerance for row detection
+
+        bubbles_to_explode = []
+        dynamite_to_trigger = []
+
+        for bubble in self.grid_bubbles[:]:
+            # Check if bubble is in the same row (horizontal line)
+            if abs(bubble.y - warship_y) <= row_tolerance:
+                bubbles_to_explode.append(bubble)
+                # Check if this bubble has dynamite (will trigger after removal)
+                if bubble.has_dynamite:
+                    dynamite_to_trigger.append((bubble.x, bubble.y))
+
+        # Remove all bubbles in the same horizontal line
+        exploded_count = 0
+        for bubble in bubbles_to_explode:
+            if bubble in self.grid_bubbles:
+                # Create particle effect for this bubble
+                self.create_explosion_particles(bubble.x, bubble.y, bubble.get_color())
+                self.grid_bubbles.remove(bubble)
+                exploded_count += 1
+
+        # Trigger dynamite explosions after removing bubbles (to avoid double processing)
+        for dx, dy in dynamite_to_trigger:
+            self.trigger_dynamite_explosion(dx, dy)
+
+        # Calculate score: exploded bubbles * remaining shooting bubbles
+        if exploded_count > 0:
+            score_increase = exploded_count * self.shots_remaining
+            self.score += score_increase
+            # Play explosion sound effect
+            self.play_explosion_sound(exploded_count)
+            # Play nice shot sound for big scores (10+ bubbles exploded)
+            if exploded_count >= 10:
+                self.play_nice_shot_sound()
+
+        # Check for floating bubbles after explosion
+        self.check_floating_bubbles()
+
+        # Check if all bubbles are cleared (win condition)
+        if len(self.grid_bubbles) == 0:
+            self.game_active = False  # Player wins!
+
     def explode_airplane(self, x, y):
         """Explode airplane and remove all bubbles within radius 4"""
         if self.airplane:
@@ -1839,7 +2006,58 @@ class BubbleShooterGame(Widget):
         else:
             print(f"Helicopter image not found: {helicopter_path}")
             self.helicopter_texture = None
-    
+
+    def load_warship_image(self):
+        """Load warship image texture with white background removed"""
+        # Use the specified warship image
+        warship_path = r"C:\Users\aminz\OneDrive\Documents\GitHub\bubble-shooter\bubble-shooter\bubble-shooter\asset\warship.jpg"
+
+        # Also try relative path for cross-platform compatibility
+        if not os.path.exists(warship_path):
+            warship_path = self.get_asset_path("warship.jpg")
+
+        if warship_path and os.path.exists(warship_path):
+            try:
+                if PIL_AVAILABLE:
+                    # Use PIL to remove white background
+                    pil_img = PILImage.open(warship_path)
+                    # Convert to RGBA if not already
+                    if pil_img.mode != 'RGBA':
+                        pil_img = pil_img.convert('RGBA')
+
+                    # Get image data
+                    data = pil_img.getdata()
+                    # Create new image data with transparent white pixels
+                    new_data = []
+                    for item in data:
+                        # If pixel is white or near-white (threshold for slight variations)
+                        # Make it transparent
+                        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+                            new_data.append((255, 255, 255, 0))  # Transparent
+                        else:
+                            new_data.append(item)  # Keep original
+
+                    pil_img.putdata(new_data)
+
+                    # Save to temporary file or use BytesIO
+                    import io
+                    img_bytes = io.BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+
+                    # Load processed image
+                    img = CoreImage(img_bytes, ext='png')
+                    self.warship_texture = img.texture
+                else:
+                    # Fallback: load image without processing
+                    img = CoreImage(warship_path)
+                    self.warship_texture = img.texture
+            except Exception as e:
+                print(f"Error loading warship image: {e}")
+                self.warship_texture = None
+        else:
+            self.warship_texture = None
+
     def load_background_music(self):
         """Load and play background music"""
         # Use the specified background music file
@@ -2468,7 +2686,73 @@ class BubbleShooterGame(Widget):
         Line(points=[x + skid_width/2, y - body_height/2 - skid_height,
                      x + skid_width/2, y - body_height/2,
                      x + skid_width/2 - skid_width * 0.3, y - body_height/2], width=2)
-    
+
+    def draw_warship(self):
+        """Draw the warship if it's active using image texture"""
+        if not self.warship or not self.warship.active:
+            return
+
+        x = self.warship.x
+        y = self.warship.y
+        width = self.warship.width * self.scale
+        height = self.warship.height * self.scale
+
+        # Load texture lazily if not already loaded
+        if self.warship_texture is None:
+            self.load_warship_image()
+
+        # Use warship image if available
+        if self.warship_texture:
+            Color(1, 1, 1, 1)
+            # Mirror horizontally if moving left (using negative width)
+            if self.warship.direction < 0:
+                # For left direction, mirror by using negative width
+                Rectangle(texture=self.warship_texture,
+                         pos=(x + width/2, y - height/2),
+                         size=(-width, height))
+            else:
+                # Normal direction (right)
+                Rectangle(texture=self.warship_texture,
+                         pos=(x - width/2, y - height/2),
+                         size=(width, height))
+            return
+
+        # Note: No enhanced graphics fallback for warship - we rely on the image file
+
+        # Basic fallback drawing if enhanced graphics not available
+        # Draw warship body (gray rectangle)
+        Color(0.5, 0.5, 0.5, 1)  # Gray
+        Rectangle(pos=(x - width/2, y - height/2), size=(width, height))
+
+        # Draw warship details (guns, etc.)
+        Color(0.3, 0.3, 0.3, 1)  # Darker gray for details
+        # Main gun turret
+        turret_size = width * 0.2
+        Rectangle(pos=(x - turret_size/2, y - height/2 + height * 0.1),
+                 size=(turret_size, turret_size))
+
+        # Secondary turrets
+        small_turret_size = width * 0.15
+        # Left turret
+        Rectangle(pos=(x - width/2 + small_turret_size, y - height/2 + height * 0.3),
+                 size=(small_turret_size, small_turret_size))
+        # Right turret
+        Rectangle(pos=(x + width/2 - small_turret_size*2, y - height/2 + height * 0.3),
+                 size=(small_turret_size, small_turret_size))
+
+        # Draw movement direction indicator (bow/stern)
+        Color(0.2, 0.2, 0.2, 1)  # Dark gray
+        if self.warship.direction > 0:
+            # Moving right - draw bow (pointed end) on right
+            bow_points = [(x + width/2, y), (x + width/2 - width*0.1, y - height/2),
+                         (x + width/2 - width*0.1, y + height/2)]
+            Triangle(points=[coord for point in bow_points for coord in point])
+        else:
+            # Moving left - draw bow (pointed end) on left
+            bow_points = [(x - width/2, y), (x - width/2 + width*0.1, y - height/2),
+                         (x - width/2 + width*0.1, y + height/2)]
+            Triangle(points=[coord for point in bow_points for coord in point])
+
     def draw_shooter(self):
         """Draw bazooka-style shooter with laser aim"""
         x, y = self.shooter_x, self.shooter_y
