@@ -3302,7 +3302,7 @@ class BubbleShooterGame(Widget):
                     x + basket_width/3, y - height/2 - basket_height], width=2)
 
     def draw_snake(self):
-        """Draw a professional, flexible, and beautiful snake with smooth serpentine motion"""
+        """Draw a professional, flexible, and beautiful snake with smooth serpentine motion and detailed graphics"""
         if not self.snake or not self.snake.active:
             return
 
@@ -3321,11 +3321,36 @@ class BubbleShooterGame(Widget):
             g = 0.6 + base_green * 0.3
             b = 0.1 + base_green * 0.2
             
-            # Draw body segment with scale pattern
+            # Calculate segment direction for orientation
+            if i < num_segments - 1:
+                next_x, next_y = self.snake.segment_positions[i + 1]
+                angle = math.atan2(next_y - seg_y, next_x - seg_x)
+                cos_a = math.cos(angle)
+                sin_a = math.sin(angle)
+            elif i > 0:
+                prev_x, prev_y = self.snake.segment_positions[i - 1]
+                angle = math.atan2(seg_y - prev_y, seg_x - prev_x)
+                cos_a = math.cos(angle)
+                sin_a = math.sin(angle)
+            else:
+                if self.snake.direction > 0:
+                    angle = 0
+                    cos_a = 1
+                    sin_a = 0
+                else:
+                    angle = math.pi
+                    cos_a = -1
+                    sin_a = 0
+            
             segment_size = segment_radius * 2
             
+            # Outer glow/shadow (very subtle)
+            Color(r * 0.3, g * 0.4, b * 0.3, 0.3)
+            Ellipse(pos=(seg_x - segment_radius * 1.12, seg_y - segment_radius * 1.12),
+                   size=(segment_size * 1.12, segment_size * 1.12))
+            
             # Shadow/outline (darker)
-            Color(r * 0.5, g * 0.6, b * 0.5, 0.6)
+            Color(r * 0.5, g * 0.6, b * 0.5, 0.7)
             Ellipse(pos=(seg_x - segment_radius * 1.05, seg_y - segment_radius * 1.05),
                    size=(segment_size * 1.05, segment_size * 1.05))
             
@@ -3334,63 +3359,92 @@ class BubbleShooterGame(Widget):
             Ellipse(pos=(seg_x - segment_radius, seg_y - segment_radius),
                    size=(segment_size, segment_size))
             
-            # Scale pattern (diamond shape on alternating segments)
-            if i % 2 == 0:  # Alternating scales
-                scale_color_r = min(1.0, r * 1.3)
-                scale_color_g = min(1.0, g * 1.2)
-                Color(scale_color_r, scale_color_g, b * 0.9, 0.7)
+            # Draw stripe pattern (darker bands)
+            if i % 3 == 1:  # Every 3rd segment has a darker stripe
+                stripe_color_r = r * 0.7
+                stripe_color_g = g * 0.75
+                stripe_color_b = b * 0.8
+                Color(stripe_color_r, stripe_color_g, stripe_color_b, 0.8)
+                stripe_width = segment_radius * 0.8
+                stripe_height = segment_radius * 1.2
+                Ellipse(pos=(seg_x - stripe_width, seg_y - stripe_height/2),
+                       size=(stripe_width * 2, stripe_height))
+            
+            # Multiple detailed scales per segment
+            num_scales_per_segment = 3 if i % 2 == 0 else 2
+            scale_size = segment_radius * 0.45
+            
+            for scale_idx in range(num_scales_per_segment):
+                scale_offset = (scale_idx - num_scales_per_segment / 2 + 0.5) * (segment_radius * 0.6)
+                scale_x = seg_x + cos_a * scale_offset * 0.3 - sin_a * scale_offset * 0.7
+                scale_y = seg_y + sin_a * scale_offset * 0.3 + cos_a * scale_offset * 0.7
                 
-                # Draw scale as a diamond using two triangles
-                scale_size = segment_radius * 0.6
+                # Scale color variation
+                scale_brightness = 1.1 + (scale_idx % 2) * 0.15
+                scale_color_r = min(1.0, r * scale_brightness)
+                scale_color_g = min(1.0, g * scale_brightness)
+                scale_color_b = b * 0.95
+                Color(scale_color_r, scale_color_g, scale_color_b, 0.75)
                 
-                # Calculate scale orientation based on segment direction
-                if i < num_segments - 1:
-                    # Use direction to next segment
-                    next_x, next_y = self.snake.segment_positions[i + 1]
-                    angle = math.atan2(next_y - seg_y, next_x - seg_x)
-                    cos_a = math.cos(angle)
-                    sin_a = math.sin(angle)
-                elif i > 0:
-                    # Last segment: use direction from previous segment
-                    prev_x, prev_y = self.snake.segment_positions[i - 1]
-                    angle = math.atan2(seg_y - prev_y, seg_x - prev_x)
-                    cos_a = math.cos(angle)
-                    sin_a = math.sin(angle)
-                else:
-                    # Head segment (only segment): use movement direction
-                    if self.snake.direction > 0:
-                        angle = 0
-                        cos_a = 1
-                        sin_a = 0
-                    else:
-                        angle = math.pi
-                        cos_a = -1
-                        sin_a = 0
-                
-                # Scale points (rotated diamond)
-                scale_w = scale_size * 0.4
+                # Draw scale as rotated diamond
+                scale_w = scale_size * 0.35
                 scale_h = scale_size * 0.5
                 
-                # Top triangle of diamond
-                p1_x = seg_x + cos_a * scale_h - sin_a * 0
-                p1_y = seg_y + sin_a * scale_h + cos_a * 0
-                p2_x = seg_x + cos_a * 0 - sin_a * scale_w
-                p2_y = seg_y + sin_a * 0 + cos_a * scale_w
-                p3_x = seg_x + cos_a * 0 + sin_a * scale_w
-                p3_y = seg_y + sin_a * 0 - cos_a * scale_w
+                # Top triangle of diamond scale
+                p1_x = scale_x + cos_a * scale_h - sin_a * 0
+                p1_y = scale_y + sin_a * scale_h + cos_a * 0
+                p2_x = scale_x + cos_a * 0 - sin_a * scale_w
+                p2_y = scale_y + sin_a * 0 + cos_a * scale_w
+                p3_x = scale_x + cos_a * 0 + sin_a * scale_w
+                p3_y = scale_y + sin_a * 0 - cos_a * scale_w
                 
                 Triangle(points=[p1_x, p1_y, p2_x, p2_y, p3_x, p3_y])
                 
-                # Bottom triangle of diamond
-                p1_x = seg_x - cos_a * scale_h - sin_a * 0
-                p1_y = seg_y - sin_a * scale_h + cos_a * 0
-                Triangle(points=[p1_x, p1_y, p2_x, p2_y, p3_x, p3_y])
+                # Bottom triangle of diamond scale
+                p4_x = scale_x - cos_a * scale_h - sin_a * 0
+                p4_y = scale_y - sin_a * scale_h + cos_a * 0
+                Triangle(points=[p4_x, p4_y, p2_x, p2_y, p3_x, p3_y])
+                
+                # Scale highlight (small bright spot on each scale)
+                scale_highlight_size = scale_size * 0.2
+                Color(1.0, 1.0, 0.95, 0.5)
+                highlight_x = scale_x + cos_a * scale_h * 0.3 - sin_a * 0
+                highlight_y = scale_y + sin_a * scale_h * 0.3 + cos_a * 0
+                Ellipse(pos=(highlight_x - scale_highlight_size/2, highlight_y - scale_highlight_size/2),
+                       size=(scale_highlight_size, scale_highlight_size))
             
-            # Highlight on top of each segment (3D effect)
-            highlight_radius = segment_radius * 0.4
-            Color(1.0, 1.0, 0.9, 0.4)  # Light yellow/white highlight
-            Ellipse(pos=(seg_x - highlight_radius * 0.3, seg_y + segment_radius * 0.3),
-                   size=(highlight_radius * 2, highlight_radius * 1.5))
+            # Side shading (darker on sides for 3D effect)
+            side_shade_width = segment_radius * 0.25
+            side_shade_height = segment_radius * 1.8
+            Color(r * 0.6, g * 0.7, b * 0.65, 0.6)
+            
+            # Left side shadow
+            shade_x = seg_x - cos_a * segment_radius * 0.6 - sin_a * segment_radius * 0.8
+            shade_y = seg_y - sin_a * segment_radius * 0.6 + cos_a * segment_radius * 0.8
+            Ellipse(pos=(shade_x - side_shade_width/2, shade_y - side_shade_height/2),
+                   size=(side_shade_width, side_shade_height))
+            
+            # Right side shadow
+            shade_x = seg_x + cos_a * segment_radius * 0.6 + sin_a * segment_radius * 0.8
+            shade_y = seg_y + sin_a * segment_radius * 0.6 - cos_a * segment_radius * 0.8
+            Ellipse(pos=(shade_x - side_shade_width/2, shade_y - side_shade_height/2),
+                   size=(side_shade_width, side_shade_height))
+            
+            # Top highlight (3D effect - main light source)
+            highlight_radius = segment_radius * 0.5
+            Color(1.0, 1.0, 0.9, 0.5)
+            highlight_x = seg_x - cos_a * highlight_radius * 0.2 - sin_a * highlight_radius * 0.4
+            highlight_y = seg_y - sin_a * highlight_radius * 0.2 + cos_a * highlight_radius * 0.4
+            Ellipse(pos=(highlight_x - highlight_radius * 0.4, highlight_y + highlight_radius * 0.4),
+                   size=(highlight_radius * 0.8, highlight_radius * 1.0))
+            
+            # Additional bright highlight spot
+            small_highlight_size = segment_radius * 0.25
+            Color(1.0, 1.0, 1.0, 0.6)
+            bright_highlight_x = seg_x - cos_a * segment_radius * 0.3 - sin_a * segment_radius * 0.5
+            bright_highlight_y = seg_y - sin_a * segment_radius * 0.3 + cos_a * segment_radius * 0.5
+            Ellipse(pos=(bright_highlight_x - small_highlight_size/2, bright_highlight_y - small_highlight_size/2),
+                   size=(small_highlight_size, small_highlight_size))
         
         # Draw professional snake head (first segment is the head)
         if num_segments > 0:
@@ -3398,105 +3452,215 @@ class BubbleShooterGame(Widget):
             head_radius = height * 0.65  # Head is slightly larger than body
             head_size = head_radius * 2
             
-            # Head shadow
-            Color(0.05, 0.3, 0.05, 0.5)
-            Ellipse(pos=(head_x - head_radius * 1.05, head_y - head_radius * 1.05),
-                   size=(head_size * 1.05, head_size * 1.05))
-            
-            # Head base (slightly brighter than body)
-            Color(0.2, 0.75, 0.25, 1)
-            Ellipse(pos=(head_x - head_radius, head_y - head_radius),
-                   size=(head_size, head_size))
-            
-            # Head highlight (3D effect)
-            highlight_radius_head = head_radius * 0.5
-            Color(0.4, 0.9, 0.5, 0.6)
-            Ellipse(pos=(head_x - highlight_radius_head * 0.5, head_y + head_radius * 0.3),
-                   size=(highlight_radius_head * 2, highlight_radius_head * 1.5))
-            
-            # Draw eyes - calculate eye position based on head direction
-            eye_size = head_radius * 0.35
-            eye_offset_y = head_radius * 0.25
-            eye_distance_x = head_radius * 0.35
-            
-            # Calculate head direction from first two segments
+            # Calculate head direction for orientation
             if num_segments > 1:
                 next_x, next_y = self.snake.segment_positions[1]
                 head_angle = math.atan2(head_y - next_y, head_x - next_x)
-                eye_dir_x = math.cos(head_angle)
-                eye_dir_y = math.sin(head_angle)
+                head_cos = math.cos(head_angle)
+                head_sin = math.sin(head_angle)
             else:
-                eye_dir_x = self.snake.direction
-                eye_dir_y = 0
+                if self.snake.direction > 0:
+                    head_angle = 0
+                    head_cos = 1
+                    head_sin = 0
+                else:
+                    head_angle = math.pi
+                    head_cos = -1
+                    head_sin = 0
+            
+            # Head outer glow
+            Color(0.05, 0.25, 0.05, 0.3)
+            Ellipse(pos=(head_x - head_radius * 1.1, head_y - head_radius * 1.1),
+                   size=(head_size * 1.1, head_size * 1.1))
+            
+            # Head shadow (deeper)
+            Color(0.05, 0.3, 0.05, 0.6)
+            Ellipse(pos=(head_x - head_radius * 1.06, head_y - head_radius * 1.06),
+                   size=(head_size * 1.06, head_size * 1.06))
+            
+            # Head base (slightly brighter than body)
+            head_base_r = 0.2
+            head_base_g = 0.75
+            head_base_b = 0.25
+            Color(head_base_r, head_base_g, head_base_b, 1)
+            Ellipse(pos=(head_x - head_radius, head_y - head_radius),
+                   size=(head_size, head_size))
+            
+            # Head scales (detailed pattern)
+            num_head_scales = 6
+            for scale_idx in range(num_head_scales):
+                scale_angle = (scale_idx / num_head_scales) * math.pi * 2
+                scale_dist = head_radius * (0.4 + (scale_idx % 2) * 0.15)
+                scale_x = head_x + head_cos * scale_dist * math.cos(scale_angle) - head_sin * scale_dist * math.sin(scale_angle)
+                scale_y = head_y + head_sin * scale_dist * math.cos(scale_angle) + head_cos * scale_dist * math.sin(scale_angle)
+                
+                scale_size = head_radius * 0.15
+                Color(head_base_r * 1.15, head_base_g * 1.1, head_base_b * 0.95, 0.7)
+                Ellipse(pos=(scale_x - scale_size/2, scale_y - scale_size/2),
+                       size=(scale_size, scale_size))
+            
+            # Head side shading (darker sides)
+            side_shade_size = head_radius * 0.8
+            Color(head_base_r * 0.7, head_base_g * 0.75, head_base_b * 0.8, 0.6)
+            
+            # Left side
+            shade_x = head_x - head_cos * head_radius * 0.5 - head_sin * head_radius * 0.7
+            shade_y = head_y - head_sin * head_radius * 0.5 + head_cos * head_radius * 0.7
+            Ellipse(pos=(shade_x - side_shade_size/2, shade_y - side_shade_size/2),
+                   size=(side_shade_size, side_shade_size))
+            
+            # Right side
+            shade_x = head_x + head_cos * head_radius * 0.5 + head_sin * head_radius * 0.7
+            shade_y = head_y + head_sin * head_radius * 0.5 - head_cos * head_radius * 0.7
+            Ellipse(pos=(shade_x - side_shade_size/2, shade_y - side_shade_size/2),
+                   size=(side_shade_size, side_shade_size))
+            
+            # Head highlight (3D effect - main light)
+            highlight_radius_head = head_radius * 0.6
+            Color(0.5, 0.95, 0.6, 0.7)
+            highlight_x = head_x - head_cos * head_radius * 0.3 - head_sin * head_radius * 0.5
+            highlight_y = head_y - head_sin * head_radius * 0.3 + head_cos * head_radius * 0.5
+            Ellipse(pos=(highlight_x - highlight_radius_head * 0.5, highlight_y + highlight_radius_head * 0.4),
+                   size=(highlight_radius_head * 1.0, highlight_radius_head * 1.2))
+            
+            # Bright highlight spot on head
+            bright_spot_size = head_radius * 0.3
+            Color(0.7, 1.0, 0.8, 0.8)
+            bright_spot_x = head_x - head_cos * head_radius * 0.4 - head_sin * head_radius * 0.6
+            bright_spot_y = head_y - head_sin * head_radius * 0.4 + head_cos * head_radius * 0.6
+            Ellipse(pos=(bright_spot_x - bright_spot_size/2, bright_spot_y - bright_spot_size/2),
+                   size=(bright_spot_size, bright_spot_size))
+            
+            # Draw enhanced eyes
+            eye_size = head_radius * 0.38
+            eye_offset_y = head_radius * 0.28
+            eye_distance_x = head_radius * 0.38
+            
+            eye_dir_x = head_cos
+            eye_dir_y = head_sin
             
             # Eye positions (on the front-facing side of head)
-            eye_center_x = head_x + eye_dir_x * eye_distance_x * 0.55
-            eye_left_x = eye_center_x - eye_dir_y * eye_distance_x * 0.25
-            eye_right_x = eye_center_x + eye_dir_y * eye_distance_x * 0.25
-            eye_top_y = head_y + eye_dir_y * eye_distance_x * 0.3 + eye_offset_y
-            eye_bottom_y = head_y + eye_dir_y * eye_distance_x * 0.3 - eye_offset_y
+            eye_center_x = head_x + eye_dir_x * eye_distance_x * 0.6
+            eye_left_x = eye_center_x - eye_dir_y * eye_distance_x * 0.3
+            eye_right_x = eye_center_x + eye_dir_y * eye_distance_x * 0.3
+            eye_top_y = head_y + eye_dir_y * eye_distance_x * 0.35 + eye_offset_y
+            eye_bottom_y = head_y + eye_dir_y * eye_distance_x * 0.35 - eye_offset_y
+            
+            # Eye socket (darker ring)
+            socket_size = eye_size * 1.15
+            Color(0.1, 0.4, 0.15, 0.8)
+            for eye_x, eye_y in [(eye_left_x, eye_top_y), (eye_right_x, eye_top_y),
+                                  (eye_left_x, eye_bottom_y), (eye_right_x, eye_bottom_y)]:
+                Ellipse(pos=(eye_x - socket_size/2, eye_y - socket_size/2),
+                       size=(socket_size, socket_size))
             
             # Eye whites with glow
-            Color(1, 1, 1, 0.9)
-            Ellipse(pos=(eye_left_x - eye_size/2, eye_top_y - eye_size/2),
-                   size=(eye_size, eye_size))
-            Ellipse(pos=(eye_right_x - eye_size/2, eye_top_y - eye_size/2),
-                   size=(eye_size, eye_size))
-            Ellipse(pos=(eye_left_x - eye_size/2, eye_bottom_y - eye_size/2),
-                   size=(eye_size, eye_size))
-            Ellipse(pos=(eye_right_x - eye_size/2, eye_bottom_y - eye_size/2),
-                   size=(eye_size, eye_size))
+            Color(0.98, 0.98, 1.0, 0.95)
+            for eye_x, eye_y in [(eye_left_x, eye_top_y), (eye_right_x, eye_top_y),
+                                  (eye_left_x, eye_bottom_y), (eye_right_x, eye_bottom_y)]:
+                Ellipse(pos=(eye_x - eye_size/2, eye_y - eye_size/2),
+                       size=(eye_size, eye_size))
             
-            # Eye pupils (black with small highlight)
-            pupil_size = eye_size * 0.55
+            # Eye iris (colored ring)
+            iris_size = eye_size * 0.75
+            Color(0.15, 0.6, 0.25, 0.9)
+            for eye_x, eye_y in [(eye_left_x, eye_top_y), (eye_right_x, eye_top_y),
+                                  (eye_left_x, eye_bottom_y), (eye_right_x, eye_bottom_y)]:
+                Ellipse(pos=(eye_x - iris_size/2, eye_y - iris_size/2),
+                       size=(iris_size, iris_size))
+            
+            # Eye pupils (black)
+            pupil_size = eye_size * 0.58
             Color(0, 0, 0, 1)
-            Ellipse(pos=(eye_left_x - pupil_size/2, eye_top_y - pupil_size/2),
-                   size=(pupil_size, pupil_size))
-            Ellipse(pos=(eye_right_x - pupil_size/2, eye_top_y - pupil_size/2),
-                   size=(pupil_size, pupil_size))
-            Ellipse(pos=(eye_left_x - pupil_size/2, eye_bottom_y - pupil_size/2),
-                   size=(pupil_size, pupil_size))
-            Ellipse(pos=(eye_right_x - pupil_size/2, eye_bottom_y - pupil_size/2),
-                   size=(pupil_size, pupil_size))
+            for eye_x, eye_y in [(eye_left_x, eye_top_y), (eye_right_x, eye_top_y),
+                                  (eye_left_x, eye_bottom_y), (eye_right_x, eye_bottom_y)]:
+                Ellipse(pos=(eye_x - pupil_size/2, eye_y - pupil_size/2),
+                       size=(pupil_size, pupil_size))
             
-            # Eye highlights (small white spots for reflection)
-            highlight_spot_size = pupil_size * 0.3
-            Color(1, 1, 1, 0.9)
-            highlight_offset = pupil_size * 0.15
-            Ellipse(pos=(eye_left_x - highlight_spot_size/2 + highlight_offset,
-                        eye_top_y - highlight_spot_size/2 + highlight_offset),
-                   size=(highlight_spot_size, highlight_spot_size))
-            Ellipse(pos=(eye_right_x - highlight_spot_size/2 + highlight_offset,
-                        eye_top_y - highlight_spot_size/2 + highlight_offset),
-                   size=(highlight_spot_size, highlight_spot_size))
-            Ellipse(pos=(eye_left_x - highlight_spot_size/2 + highlight_offset,
-                        eye_bottom_y - highlight_spot_size/2 + highlight_offset),
-                   size=(highlight_spot_size, highlight_spot_size))
-            Ellipse(pos=(eye_right_x - highlight_spot_size/2 + highlight_offset,
-                        eye_bottom_y - highlight_spot_size/2 + highlight_offset),
-                   size=(highlight_spot_size, highlight_spot_size))
+            # Eye highlights (multiple reflection spots)
+            highlight_spot_size = pupil_size * 0.35
+            Color(1, 1, 1, 0.95)
+            highlight_offset = pupil_size * 0.2
+            small_highlight_size = pupil_size * 0.15
             
-            # Nostrils (small dark circles)
-            nostril_size = head_radius * 0.08
+            for eye_x, eye_y in [(eye_left_x, eye_top_y), (eye_right_x, eye_top_y),
+                                  (eye_left_x, eye_bottom_y), (eye_right_x, eye_bottom_y)]:
+                # Main highlight
+                Ellipse(pos=(eye_x - highlight_spot_size/2 + highlight_offset,
+                            eye_y - highlight_spot_size/2 + highlight_offset),
+                       size=(highlight_spot_size, highlight_spot_size))
+                # Secondary smaller highlight
+                Ellipse(pos=(eye_x - small_highlight_size/2 + highlight_offset * 0.5,
+                            eye_y - small_highlight_size/2 - highlight_offset * 0.3),
+                       size=(small_highlight_size, small_highlight_size))
+            
+            # Nostrils (detailed)
+            nostril_size = head_radius * 0.1
             nostril_y = head_y
-            nostril_offset_x = head_radius * 0.4
+            nostril_offset_x = head_radius * 0.45
             nostril_x = head_x - eye_dir_x * nostril_offset_x
             
-            Color(0.1, 0.2, 0.1, 1)
-            nostril_spacing = nostril_offset_x * 0.15
-            Ellipse(pos=(nostril_x - nostril_spacing - nostril_size/2, nostril_y - nostril_size/2),
-                   size=(nostril_size, nostril_size))
-            Ellipse(pos=(nostril_x - nostril_spacing - nostril_size/2, nostril_y + nostril_size - nostril_size/2),
-                   size=(nostril_size, nostril_size))
+            # Nostril shadow
+            Color(0.05, 0.15, 0.08, 0.6)
+            nostril_spacing = head_radius * 0.12
+            for nostril_offset in [-nostril_spacing, nostril_spacing]:
+                nostril_pos_x = nostril_x + nostril_offset
+                Ellipse(pos=(nostril_pos_x - nostril_size * 1.1/2, nostril_y - nostril_size * 1.1/2),
+                       size=(nostril_size * 1.1, nostril_size * 1.1))
             
-            # Mouth line (subtle)
-            mouth_width = head_radius * 0.5
-            mouth_y = head_y - head_radius * 0.2
-            mouth_start_x = head_x - eye_dir_x * mouth_width * 0.3
-            mouth_end_x = head_x - eye_dir_x * mouth_width * 0.8
+            # Nostrils (dark)
+            Color(0.08, 0.18, 0.1, 1)
+            for nostril_offset in [-nostril_spacing, nostril_spacing]:
+                nostril_pos_x = nostril_x + nostril_offset
+                Ellipse(pos=(nostril_pos_x - nostril_size/2, nostril_y - nostril_size/2),
+                       size=(nostril_size, nostril_size))
             
-            Color(0.15, 0.35, 0.15, 0.8)
-            Line(points=[mouth_start_x, mouth_y, mouth_end_x, mouth_y], width=max(1, int(head_radius * 0.1)))
+            # Mouth line (more detailed)
+            mouth_width = head_radius * 0.55
+            mouth_y = head_y - head_radius * 0.22
+            mouth_start_x = head_x - eye_dir_x * mouth_width * 0.25
+            mouth_end_x = head_x - eye_dir_x * mouth_width * 0.85
+            
+            # Mouth shadow line
+            Color(0.1, 0.25, 0.12, 0.7)
+            Line(points=[mouth_start_x, mouth_y + 1, mouth_end_x, mouth_y + 1],
+                 width=max(1, int(head_radius * 0.12)))
+            
+            # Main mouth line
+            Color(0.12, 0.32, 0.15, 0.9)
+            Line(points=[mouth_start_x, mouth_y, mouth_end_x, mouth_y],
+                 width=max(2, int(head_radius * 0.15)))
+            
+            # Tongue (forked tongue)
+            tongue_length = head_radius * 0.7
+            tongue_start_x = head_x - eye_dir_x * head_radius * 0.85
+            tongue_start_y = head_y - head_radius * 0.25
+            tongue_end_x = tongue_start_x - eye_dir_x * tongue_length
+            tongue_end_y = tongue_start_y
+            
+            # Tongue base
+            tongue_width = head_radius * 0.08
+            Color(0.9, 0.3, 0.4, 0.9)  # Red/pink
+            Line(points=[tongue_start_x, tongue_start_y, tongue_end_x, tongue_end_y],
+                 width=max(2, int(tongue_width)))
+            
+            # Forked tips
+            fork_length = tongue_length * 0.35
+            fork_angle = 0.3  # radians
+            fork_cos = math.cos(fork_angle)
+            fork_sin = math.sin(fork_angle)
+            
+            # Left fork
+            fork_left_end_x = tongue_end_x - eye_dir_x * fork_length * fork_cos + eye_dir_y * fork_length * fork_sin
+            fork_left_end_y = tongue_end_y - eye_dir_y * fork_length * fork_cos - eye_dir_x * fork_length * fork_sin
+            Line(points=[tongue_end_x, tongue_end_y, fork_left_end_x, fork_left_end_y],
+                 width=max(1, int(tongue_width * 0.6)))
+            
+            # Right fork
+            fork_right_end_x = tongue_end_x - eye_dir_x * fork_length * fork_cos - eye_dir_y * fork_length * fork_sin
+            fork_right_end_y = tongue_end_y - eye_dir_y * fork_length * fork_cos + eye_dir_x * fork_length * fork_sin
+            Line(points=[tongue_end_x, tongue_end_y, fork_right_end_x, fork_right_end_y],
+                 width=max(1, int(tongue_width * 0.6)))
 
     def draw_shooter(self):
         """Draw bazooka-style shooter with laser aim"""
