@@ -8,6 +8,7 @@ from kivy.core.text import Label as CoreLabel
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
 from kivy.core.audio import SoundLoader
+from kivy.storage.jsonstore import JsonStore
 import random
 import math
 import os
@@ -318,6 +319,11 @@ class BubbleShooterGame(Widget):
         self.is_loading = False  # Loading state for restart/level transition
         self.level_just_loaded = False  # Flag to prevent auto-shooting after level load
         
+        # Save/load system using JsonStore (works on Android)
+        self.save_store = JsonStore('player_profile.json')
+        self.total_score = 0  # Cumulative score across all levels
+        self.highest_level = 1  # Highest level reached
+        
         # Bubbles
         self.grid_bubbles = []  # Bubbles in grid
         self.shot_bubbles = []  # Currently shot bubble
@@ -429,6 +435,43 @@ class BubbleShooterGame(Widget):
 
         # Note: on_touch_down, on_touch_move, on_touch_up are automatically
         # connected by Kivy when using these method names
+        
+        # Load saved profile
+        self.load_profile()
+    
+    def load_profile(self):
+        """Load saved player profile"""
+        try:
+            if 'profile' in self.save_store:
+                profile = self.save_store.get('profile')
+                self.highest_level = profile.get('highest_level', 1)
+                self.total_score = profile.get('total_score', 0)
+        except Exception as e:
+            # If loading fails, start fresh
+            print(f"Could not load profile: {e}")
+            self.highest_level = 1
+            self.total_score = 0
+    
+    def save_profile(self):
+        """Save player profile"""
+        try:
+            # Save highest_level as current_level (next level to play)
+            self.save_store.put('profile',
+                               highest_level=self.highest_level,
+                               total_score=self.total_score,
+                               current_level=self.highest_level)
+        except Exception as e:
+            print(f"Could not save profile: {e}")
+    
+    def on_level_won(self):
+        """Called when level is won - update progress and save"""
+        # Update total score and highest level
+        self.total_score += self.score
+        next_level = self.level + 1
+        if next_level > self.highest_level:
+            self.highest_level = next_level
+        # Save profile
+        self.save_profile()
     
     def on_size(self, *args):
         """Handle screen size changes - scale all game elements proportionally"""
@@ -1492,6 +1535,7 @@ class BubbleShooterGame(Widget):
             # Check if all bubbles are cleared (win condition)
             if len(self.grid_bubbles) == 0:
                 self.game_active = False  # Player wins!
+                self.on_level_won()  # Save progress
     
     def get_dynamite_radius(self):
         """Get dynamite explosion radius in bubble diameters based on level"""
