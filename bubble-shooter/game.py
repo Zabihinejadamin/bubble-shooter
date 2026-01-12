@@ -1262,15 +1262,16 @@ class BubbleShooterGame(Widget):
                 is_diamond = False
                 if hasattr(bubble, 'has_diamond') and bubble.has_diamond:
                     is_diamond = True
-                elif hasattr(bubble, 'showing_diamond') and bubble.showing_diamond:
+                if hasattr(bubble, 'showing_diamond') and bubble.showing_diamond:
                     is_diamond = True
                     # Also set has_diamond for consistency
                     bubble.has_diamond = True
                 
                 if is_diamond:
                     # Add diamond to storage
+                    old_storage = self.diamond_storage
                     self.diamond_storage += 1
-                    print(f"Diamond collected! Storage: {self.diamond_storage} (has_diamond={getattr(bubble, 'has_diamond', False)}, showing_diamond={getattr(bubble, 'showing_diamond', False)})")
+                    print(f"Diamond collected! Storage: {old_storage} -> {self.diamond_storage} (has_diamond={getattr(bubble, 'has_diamond', False)}, showing_diamond={getattr(bubble, 'showing_diamond', False)})")
                 self.falling_bubbles.remove(bubble)
         
         # Update particles
@@ -1558,11 +1559,13 @@ class BubbleShooterGame(Widget):
                         # Diamond found! Show diamond for a couple seconds before it falls
                         closest_bubble.showing_diamond = True
                         closest_bubble.diamond_show_timer = 2.0  # Show for 2 seconds
+                        # Give 3 extra shots immediately when diamond is detected
+                        self.shots_remaining += 3
                         # Create special diamond particles (sparkly effect)
                         self.create_explosion_particles(closest_bubble.x, closest_bubble.y, (0.8, 0.9, 1.0), particle_count=20, speed_multiplier=1.2)
                         # Play diamond sound
                         self.play_diamond_sound()
-                        print(f"Diamond revealed! It will drop and be added to storage.")
+                        print(f"Diamond revealed! Got 3 extra shots. It will drop and be added to storage.")
                     else:
                         # Regular rock - make it fall immediately
                         closest_bubble.attached = False
@@ -4384,7 +4387,7 @@ class BubbleShooterGame(Widget):
                      size=shots_label.texture.size)
             
             # ===== DIAMOND STORAGE (Above Total Score) =====
-            diamond_text = f'{self.diamond_storage}'  # Just the count (diamond image will be drawn separately)
+            diamond_text = str(self.diamond_storage)  # Just the count (diamond image will be drawn separately)
             diamond_font_size = self.base_font_size_small * self.scale
             diamond_label = CoreLabel(text=diamond_text, 
                                      font_size=diamond_font_size, 
