@@ -20,3 +20,4 @@ class Level26(LevelBase):
         # Game state for Level 26
         self.max_shots = 2
         self.shots_remaining = 2
+

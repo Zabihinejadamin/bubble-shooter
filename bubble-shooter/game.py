@@ -359,7 +359,7 @@ class Bubble:
         self.showing_diamond = False  # Is this rock currently showing the diamond?
         self.diamond_show_timer = 0.0  # Timer for how long to show the diamond (seconds)
         self.falling = False  # Is bubble falling (disconnected from top)?
-        self.gravity = 300  # Gravity acceleration for falling bubbles
+        self.gravity = -300  # Gravity acceleration for falling bubbles (negative because Y=0 is at bottom)
     
     def update(self, dt):
         """Update bubble position"""
@@ -761,8 +761,8 @@ class BubbleShooterGame(Widget):
                 if not self.check_bubble_intersections(bubble):
                     self.grid_bubbles.append(bubble)
         
-        # Assign rocks (for levels > 5, but testing in level 1)
-        if self.level >= 1 and len(self.grid_bubbles) > 0:  # Changed from > 5 for testing
+        # Assign rocks (for levels <= 5)
+        if self.level <= 5 and len(self.grid_bubbles) > 0:
             num_rocks = random.randint(3, 5)
             
             # Randomly select bubbles to be rocks
@@ -1416,8 +1416,8 @@ class BubbleShooterGame(Widget):
                         self.shot_bubbles.remove(bubble)
                         break
 
-        # Update snake (for levels > 10, but testing in level 1)
-        if self.level >= 1:  # Changed from > 10 for testing
+        # Update snake (for levels > 30)
+        if self.level > 30:
             # Spawn snake if needed
             if self.snake is None or not self.snake.active:
                 self.snake_spawn_timer += dt
@@ -3018,12 +3018,8 @@ class BubbleShooterGame(Widget):
     
     def draw_background(self):
         """Draw game background using image"""
-        # For levels 6-9, use antique blue background
-        if self.level >= 6:
-            # Antique blue background for levels 6-9
-            Color(0.35, 0.45, 0.55, 1)  # Antique blue (muted blue-gray)
-            Rectangle(pos=(0, 0), size=(self.width, self.height))
-        elif self.background_texture and self.width > 0 and self.height > 0:
+        # Use background image for all levels
+        if self.background_texture and self.width > 0 and self.height > 0:
             # Draw background image covering entire screen with darker tint
             Color(0.4, 0.4, 0.4, 1)  # Darker tint (0.4 = 40% brightness)
             Rectangle(texture=self.background_texture, 
@@ -4443,8 +4439,8 @@ class BubbleShooterGame(Widget):
             # Diamond Storage position (above total score on RIGHT side)
             diamond_panel_y = total_score_panel_y + total_score_panel_height + 2 * self.scale  # Above total score
             # Make panel wider to accommodate diamond image + text
-            diamond_panel_width = diamond_label.texture.size[0] + 80 * self.scale  # Extra space for diamond image
-            diamond_panel_height = max(diamond_label.texture.size[1], 60 * self.scale) + 15 * self.scale  # Ensure enough height for image
+            diamond_panel_width = diamond_label.texture.size[0] + 130 * self.scale  # Extra space for diamond image (increased for 2x size)
+            diamond_panel_height = max(diamond_label.texture.size[1], 110 * self.scale) + 15 * self.scale  # Ensure enough height for image (increased for 2x size)
             
             # Diamond Storage panel shadow
             Color(0, 0, 0, 0.3)
@@ -4466,7 +4462,7 @@ class BubbleShooterGame(Widget):
                 self.load_diamond_image()
             
             if self.diamond_texture:
-                diamond_icon_size = 50 * self.scale  # Size of diamond icon
+                diamond_icon_size = 100 * self.scale  # Size of diamond icon (doubled from 50)
                 diamond_icon_x = score_panel_x + 20 * self.scale
                 diamond_icon_y = diamond_panel_y + (diamond_panel_height - diamond_icon_size) / 2
                 Color(1, 1, 1, 1)  # Full color
@@ -4475,7 +4471,7 @@ class BubbleShooterGame(Widget):
                          size=(diamond_icon_size, diamond_icon_size))
             
             # Draw Diamond Storage text (right of icon)
-            diamond_text_x = score_panel_x + 80 * self.scale  # Start after icon
+            diamond_text_x = score_panel_x + 130 * self.scale  # Start after icon (increased for 2x size)
             diamond_text_y = diamond_panel_y + (diamond_panel_height - diamond_label.texture.size[1]) / 2
             Color(0.3, 0.8, 1.0, 1)  # Bright cyan/blue text
             Rectangle(texture=diamond_label.texture, 

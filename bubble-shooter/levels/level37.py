@@ -20,3 +20,4 @@ class Level37(LevelBase):
         # Game state for Level 37
         self.max_shots = 1
         self.shots_remaining = 1
+

@@ -20,3 +20,4 @@ class Level25(LevelBase):
         # Game state for Level 25
         self.max_shots = 3
         self.shots_remaining = 3
+

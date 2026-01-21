@@ -21,3 +21,4 @@ class Level17(LevelBase):
         self.max_shots = 11
         self.shots_remaining = 11
 
+

@@ -20,3 +20,4 @@ class Level22(LevelBase):
         # Game state for Level 22
         self.max_shots = 6
         self.shots_remaining = 6
+
